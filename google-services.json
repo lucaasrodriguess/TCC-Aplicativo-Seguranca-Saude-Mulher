@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "1050394973274",
+    "project_id": "tcc-safeher",
+    "storage_bucket": "tcc-safeher.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1050394973274:android:402852740f670d4c53f463",
+        "android_client_info": {
+          "package_name": "com.vagnudoo.SafeHer"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1050394973274-l6hoagljn8ad57qnh0rd5k95v9l6bp1q.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA_kqoDaj3E6WFljxriNCkeYKJkySNz-aE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1050394973274-l6hoagljn8ad57qnh0rd5k95v9l6bp1q.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
