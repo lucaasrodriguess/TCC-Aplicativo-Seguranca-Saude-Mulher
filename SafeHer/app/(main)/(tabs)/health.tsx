@@ -24,7 +24,7 @@ export default function HealthScreen() {
       {/* Card Apoio Psicológico */}
       <TouchableOpacity
         style={styles.card}
-        onPress={() => router.push("/support")}
+        onPress={() => router.push("../cuidai")}
       >
         <Ionicons name="chatbubbles" size={28} color="#9333ea" />
         <Text style={styles.cardText}>Apoio Psicológico</Text>

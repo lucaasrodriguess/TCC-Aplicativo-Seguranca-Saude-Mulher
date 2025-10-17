@@ -54,8 +54,8 @@ export default function ProfileScreen() {
         style: "destructive",
         onPress: () => {
           logout();
-          // Navega para a tela de login (assumindo que está na raiz)
-          router.replace("/LoginScreen");
+
+          router.replace("../auth/loginscreen");
         },
       },
     ]);

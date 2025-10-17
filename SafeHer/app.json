@@ -4,7 +4,7 @@
     "slug": "SafeHer",
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "../SafeHer-Novo/assets/images/logo.png",
+        "foregroundImage": "./assets/images/logo.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,

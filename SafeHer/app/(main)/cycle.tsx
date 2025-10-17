@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import { useRouter, useFocusEffect } from "expo-router";
+import React, { useMemo, useState, useContext } from "react";
 import {
   Alert,
   FlatList,
@@ -11,23 +11,32 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  ActivityIndicator,
+  Platform,
 } from "react-native";
 
-// --- TIPOS E INTERFACES APRIMORADAS ---
+// Importações do Firebase e do Contexto do Usuário
+import { db } from "../../services/firebaseConfig"; // ATENÇÃO: Verifique se este caminho está correto
+import { UserContext, UserContextType } from "../../contexts/UserContext"; // ATENÇÃO: Verifique se este caminho está correto
+import {
+  collection,
+  query,
+  orderBy,
+  getDocs,
+  addDoc,
+  doc,
+  updateDoc,
+  where,
+  limit,
+} from "firebase/firestore";
+
 interface Cycle {
-  id: number;
+  id: string; // ID do documento do Firestore
   startDate: Date;
-  endDate?: Date; // Adicionado para registrar o fim da menstruação
+  endDate?: Date;
   notes?: string;
 }
 
-// --- FUNÇÕES AUXILIARES COMPLETAS E REFINADAS ---
-
-/**
- * Formata um objeto Date para uma string no formato 'YYYY-MM-DD'.
- * @param {Date} date - O objeto Date a ser formatado.
- * @returns {string | null} A data formatada ou null se a data for inválida.
- */
 const formatDateKey = (date: Date): string | null => {
   if (!date || isNaN(new Date(date).getTime())) {
     return null;
@@ -39,22 +48,13 @@ const formatDateKey = (date: Date): string | null => {
   return `${year}-${month}-${day}`;
 };
 
-/**
- * Calcula a duração média do ciclo e da menstruação com base no histórico.
- * @param {Cycle[]} cycles - O histórico de ciclos do usuário.
- * @returns {{ averageCycleLength: number; averageMenstruationLength: number }} As médias calculadas.
- */
 const calculateAverages = (cycles: Cycle[]) => {
-  // Retorna valores padrão se não houver histórico suficiente
   if (cycles.length < 2) {
     return { averageCycleLength: 28, averageMenstruationLength: 5 };
   }
-
   const sortedCycles = [...cycles].sort(
     (a, b) => a.startDate.getTime() - b.startDate.getTime()
   );
-
-  // Calcula a duração média do ciclo (intervalo entre inícios de menstruação)
   const cycleLengths: number[] = [];
   for (let i = 0; i < sortedCycles.length - 1; i++) {
     const diff =
@@ -67,8 +67,6 @@ const calculateAverages = (cycles: Cycle[]) => {
     cycleLengths.length > 0
       ? Math.round(totalCycleLength / cycleLengths.length)
       : 28;
-
-  // Calcula a duração média da menstruação (apenas para ciclos com data de fim)
   const menstruationLengths = sortedCycles
     .filter((c) => c.endDate)
     .map((c) => {
@@ -83,18 +81,9 @@ const calculateAverages = (cycles: Cycle[]) => {
     menstruationLengths.length > 0
       ? Math.round(totalMenstruationLength / menstruationLengths.length)
       : 5;
-
   return { averageCycleLength, averageMenstruationLength };
 };
 
-/**
- * Calcula dinamicamente as fases do ciclo para exibição no calendário.
- * Usa médias do histórico para previsões e dados reais para ciclos passados.
- * @param {Cycle[]} cycles - O histórico de ciclos.
- * @param {number} defaultCycleLength - Duração padrão do ciclo para usar como fallback.
- * @param {number} defaultMenstruationLength - Duração padrão da menstruação como fallback.
- * @returns {Record<string, string>} Um objeto mapeando datas para fases do ciclo.
- */
 const calculateDynamicCyclePhases = (
   cycles: Cycle[],
   defaultCycleLength: number = 28,
@@ -114,7 +103,6 @@ const calculateDynamicCyclePhases = (
     (a, b) => b.startDate.getTime() - a.startDate.getTime()
   );
 
-  // Marca os períodos menstruais passados com base nos dados reais (startDate e endDate)
   sortedCycles.forEach((cycle) => {
     const periodEnd =
       cycle.endDate ||
@@ -130,13 +118,11 @@ const calculateDynamicCyclePhases = (
     }
   });
 
-  // Gera previsões de ciclos futuros com base nas médias
   const lastCycle = sortedCycles[0];
   for (let i = 1; i <= 6; i++) {
     const cycleStartDate = new Date(lastCycle.startDate);
     cycleStartDate.setDate(cycleStartDate.getDate() + i * cycleLength);
 
-    // Previsão da próxima menstruação
     for (let j = 0; j < menstruationLength; j++) {
       const day = new Date(cycleStartDate);
       day.setDate(day.getDate() + j);
@@ -144,7 +130,6 @@ const calculateDynamicCyclePhases = (
       if (key) phases[key] = "predicted";
     }
 
-    // Previsão da ovulação e período fértil
     const ovulationDay = new Date(cycleStartDate);
     ovulationDay.setDate(ovulationDay.getDate() + cycleLength - 14);
 
@@ -166,7 +151,6 @@ const calculateDynamicCyclePhases = (
   return phases;
 };
 
-// --- SUB-COMPONENTES VISUAIS (Sem grandes alterações, mas adaptados para novas props) ---
 const CycleSummary = ({
   cycles,
   averageCycleLength,
@@ -244,14 +228,19 @@ const CalendarGrid = ({
     const dayDate = new Date(year, month, day);
     const dateKey = formatDateKey(dayDate);
     const phase = dateKey ? cyclePhases[dateKey] : undefined;
-
-    const phaseStyle = styles[phase as keyof typeof styles];
     const isToday = dateKey === todayKey;
+
+    // A CORREÇÃO FINAL PARA O ERRO DE TIPAGEM
+    const styleArray = [styles.dayCell];
+    const phaseStyle = styles[phase as keyof typeof styles];
+    if (phaseStyle) {
+      styleArray.push(phaseStyle);
+    }
 
     days.push(
       <TouchableOpacity
         key={day}
-        style={[styles.dayCell, phaseStyle]}
+        style={styleArray}
         onPress={() => onDayPress(day)}
       >
         <View
@@ -294,52 +283,74 @@ const CalendarGrid = ({
   );
 };
 
-// --- TELA PRINCIPAL COMPLETA E REFATORADA ---
 export default function CycleScreen() {
   const router = useRouter();
+  const { user } = useContext(UserContext) as UserContextType;
+
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [cycles, setCycles] = useState<Cycle[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
   const [isLegendVisible, setLegendVisible] = useState(false);
   const [isHistoryVisible, setHistoryVisible] = useState(false);
-
   const [isNoteModalVisible, setNoteModalVisible] = useState(false);
   const [currentEditingCycle, setCurrentEditingCycle] = useState<Cycle | null>(
     null
   );
   const [noteInput, setNoteInput] = useState("");
 
-  // Estado inicial com dados de exemplo, incluindo endDate
-  const [cycles, setCycles] = useState<Cycle[]>([
-    {
-      id: 3,
-      startDate: new Date(2025, 7, 15),
-      endDate: new Date(2025, 7, 19),
-      notes: "Fluxo intenso no primeiro dia.",
-    },
-    {
-      id: 2,
-      startDate: new Date(2025, 6, 18),
-      endDate: new Date(2025, 6, 22),
-      notes: "Ciclo normal.",
-    },
-    { id: 1, startDate: new Date(2025, 5, 21), endDate: new Date(2025, 5, 25) },
-  ]);
+  const loadCyclesFromFirebase = async () => {
+    if (!user) {
+      setCycles([]); // Limpa os ciclos se o usuário deslogar
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const cyclesCollectionRef = collection(db, "users", user.uid, "cycles");
+      const q = query(cyclesCollectionRef, orderBy("startDate", "desc"));
+      const querySnapshot = await getDocs(q);
+      const fetchedCycles: Cycle[] = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        fetchedCycles.push({
+          id: doc.id,
+          startDate: data.startDate.toDate(),
+          endDate: data.endDate ? data.endDate.toDate() : undefined,
+          notes: data.notes,
+        });
+      });
+      setCycles(fetchedCycles);
+    } catch (error) {
+      console.error("Erro ao buscar ciclos:", error);
+      Alert.alert("Erro", "Não foi possível carregar o histórico de ciclos.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  // As durações agora são calculadas dinamicamente e não são mais estados fixos
+  useFocusEffect(
+    React.useCallback(() => {
+      loadCyclesFromFirebase();
+    }, [user])
+  );
+
   const { averageCycleLength } = useMemo(
     () => calculateAverages(cycles),
     [cycles]
   );
-
   const cyclePhases = useMemo(
     () => calculateDynamicCyclePhases(cycles),
     [cycles]
   );
 
-  /**
-   * Lida com o clique em um dia do calendário, oferecendo opções para
-   * iniciar ou finalizar um período menstrual.
-   */
   const handleDayPress = (day: number) => {
+    if (!user)
+      return Alert.alert(
+        "Aviso",
+        "Você precisa estar logado para registrar seu ciclo."
+      );
+
     const selectedDate = new Date(
       currentDate.getFullYear(),
       currentDate.getMonth(),
@@ -368,44 +379,74 @@ export default function CycleScreen() {
         { text: "Cancelar", style: "cancel" },
         {
           text: "Marcar Fim da Menstruação",
-          onPress: () => {
-            const sorted = [...cycles].sort(
-              (a, b) => b.startDate.getTime() - a.startDate.getTime()
-            );
-            const lastCycleWithoutEnd = sorted.find((c) => !c.endDate);
+          onPress: async () => {
+            if (!user) return;
+            try {
+              const cyclesCollectionRef = collection(
+                db,
+                "users",
+                user.uid,
+                "cycles"
+              );
+              const q = query(
+                cyclesCollectionRef,
+                where("endDate", "==", null),
+                orderBy("startDate", "desc"),
+                limit(1)
+              );
+              const querySnapshot = await getDocs(q);
 
-            if (lastCycleWithoutEnd) {
-              if (selectedDate < lastCycleWithoutEnd.startDate) {
+              if (querySnapshot.empty) {
                 Alert.alert(
-                  "Erro",
-                  "A data de término não pode ser anterior à data de início do ciclo."
+                  "Aviso",
+                  "Não há um ciclo em aberto para registrar o fim."
                 );
                 return;
               }
-              const updatedCycles = cycles.map((c) =>
-                c.id === lastCycleWithoutEnd.id
-                  ? { ...c, endDate: selectedDate }
-                  : c
+
+              const lastCycleDoc = querySnapshot.docs[0];
+              const lastCycleStartDate = lastCycleDoc.data().startDate.toDate();
+
+              if (selectedDate < lastCycleStartDate) {
+                Alert.alert(
+                  "Erro",
+                  "A data de término não pode ser anterior à data de início."
+                );
+                return;
+              }
+
+              await updateDoc(
+                doc(db, "users", user.uid, "cycles", lastCycleDoc.id),
+                { endDate: selectedDate }
               );
-              setCycles(updatedCycles);
               Alert.alert("Sucesso", "Fim da menstruação registrado!");
-            } else {
-              Alert.alert(
-                "Aviso",
-                "Não há um ciclo em aberto para registrar o fim. Por favor, marque um novo início primeiro."
-              );
+              loadCyclesFromFirebase();
+            } catch (error) {
+              console.error("Erro ao marcar fim do ciclo:", error);
             }
           },
         },
         {
           text: "Marcar Início da Menstruação",
-          onPress: () => {
-            const newCycle = { id: Date.now(), startDate: selectedDate };
-            const newCycles = [newCycle, ...cycles].sort(
-              (a, b) => b.startDate.getTime() - a.startDate.getTime()
-            );
-            setCycles(newCycles);
-            Alert.alert("Sucesso", "Novo ciclo registrado!");
+          onPress: async () => {
+            if (!user) return;
+            try {
+              const cyclesCollectionRef = collection(
+                db,
+                "users",
+                user.uid,
+                "cycles"
+              );
+              await addDoc(cyclesCollectionRef, {
+                startDate: selectedDate,
+                endDate: null,
+                notes: "",
+              });
+              Alert.alert("Sucesso", "Novo ciclo registrado!");
+              loadCyclesFromFirebase();
+            } catch (error) {
+              console.error("Erro ao marcar início do ciclo:", error);
+            }
           },
         },
       ]
@@ -418,19 +459,41 @@ export default function CycleScreen() {
     setNoteModalVisible(true);
   };
 
-  const handleSaveNote = () => {
-    if (!currentEditingCycle) return;
-    const updatedCycles = cycles.map((c) =>
-      c.id === currentEditingCycle.id ? { ...c, notes: noteInput } : c
-    );
-    setCycles(updatedCycles);
-    setNoteModalVisible(false);
-    setCurrentEditingCycle(null);
+  const handleSaveNote = async () => {
+    if (!currentEditingCycle || !user) return;
+    try {
+      const cycleDocRef = doc(
+        db,
+        "users",
+        user.uid,
+        "cycles",
+        currentEditingCycle.id
+      );
+      await updateDoc(cycleDocRef, { notes: noteInput });
+      setNoteModalVisible(false);
+      loadCyclesFromFirebase();
+    } catch (error) {
+      console.error("Erro ao salvar nota:", error);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          backgroundColor: "#f8f7ff",
+        }}
+      >
+        <ActivityIndicator size="large" color="#581c87" />
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container}>
-      {/* Modal da Legenda (sem alterações) */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -461,7 +524,6 @@ export default function CycleScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {/* Modal do Histórico (sem grandes alterações) */}
       <Modal
         animationType="slide"
         visible={isHistoryVisible}
@@ -479,7 +541,7 @@ export default function CycleScreen() {
             keyExtractor={(item) => item.id.toString()}
             renderItem={({ item, index }) => {
               const nextCycle = index > 0 ? cycles[index - 1] : null;
-              let currentCycleLength = averageCycleLength; // Usa a média como padrão
+              let currentCycleLength = averageCycleLength;
               if (nextCycle) {
                 const diff =
                   nextCycle.startDate.getTime() - item.startDate.getTime();
@@ -519,7 +581,6 @@ export default function CycleScreen() {
         </View>
       </Modal>
 
-      {/* Modal de Notas (sem alterações) */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -557,14 +618,7 @@ export default function CycleScreen() {
         </View>
       </Modal>
 
-      {/* Layout Principal da Tela */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#581c87" />
-        </TouchableOpacity>
         <Text style={styles.title}>Ciclo Menstrual</Text>
       </View>
 
@@ -624,8 +678,10 @@ export default function CycleScreen() {
         <View style={styles.divider} />
         <CycleSummary cycles={cycles} averageCycleLength={averageCycleLength} />
       </View>
-
-      <TouchableOpacity style={styles.button}>
+      <TouchableOpacity
+        style={styles.button}
+        onPress={() => router.push("../cuidai")}
+      >
         <Text style={styles.buttonText}>Fale com a CuidAI 💜</Text>
       </TouchableOpacity>
       <TouchableOpacity
@@ -638,7 +694,7 @@ export default function CycleScreen() {
   );
 }
 
-// --- ESTILOS COMPLETOS E REFINADOS (sem alterações) ---
+// ESTILOS COMPLETOS E REFINADOS
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -650,10 +706,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 16,
     marginBottom: 10,
-  },
-  backButton: {
-    padding: 8,
-    marginRight: 8,
+    paddingTop: Platform.OS === "ios" ? 0 : 20, // Padding extra para Android
   },
   title: {
     fontSize: 24,
