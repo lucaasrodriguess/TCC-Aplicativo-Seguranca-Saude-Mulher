@@ -1,35 +1,64 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import React, { useContext, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Image,
-  Pressable,
+  KeyboardAvoidingView,
+  Platform,
   SafeAreaView,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { UserContext, UserContextType } from "../../contexts/UserContext";
+import { storage } from "../../services/firebaseConfig";
 
+// --- COMPONENTE DE CABEÇALHO ---
+const Header = () => {
+  const router = useRouter();
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.headerContainer}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.headerIcon}
+        >
+          <Ionicons name="chevron-back" size={28} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Editar Perfil</Text>
+        <View style={styles.headerIcon} />
+      </View>
+    </SafeAreaView>
+  );
+};
+
+// --- TELA PRINCIPAL ---
 export default function EditProfileScreen() {
   const context = useContext(UserContext) as UserContextType;
   const router = useRouter();
 
   if (!context || !context.user) {
-    return <Text>Carregando...</Text>;
+    return (
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" color="#003249" />
+      </View>
+    );
   }
 
-  // 1. Em vez de 'setUser', agora pegamos 'updateUser' do contexto
   const { user, updateUser } = context;
 
-  const [avatar, setAvatar] = useState(user.avatar);
+  const [avatarUri, setAvatarUri] = useState(user.avatar);
   const [name, setName] = useState(user.name);
-  const [phone, setPhone] = useState(user.phone);
-  const [email] = useState(user.email);
+  const [phone, setPhone] = useState(user.phone || "");
+  const [isLoading, setIsLoading] = useState(false);
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -44,114 +73,232 @@ export default function EditProfileScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 1,
+      quality: 0.7,
     });
 
     if (!result.canceled) {
-      setAvatar(result.assets[0].uri);
+      setAvatarUri(result.assets[0].uri);
     }
   };
 
-  const handleSaveChanges = () => {
-    // 2. Usamos a nova função 'updateUser' para salvar os dados
-    updateUser({ name, phone, avatar });
+  const uploadImage = async (uri: string): Promise<string> => {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    const storageRef = ref(storage, `profile_pictures/${user.uid}`);
+    await uploadBytes(storageRef, blob);
+    return await getDownloadURL(storageRef);
+  };
 
-    Alert.alert("Sucesso", "Seu perfil foi atualizado!");
-    router.back();
+  const formatPhone = (text: string) => {
+    const digits = text.replace(/\D/g, "");
+    if (digits.length <= 2) return `(${digits}`;
+    if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(
+      7,
+      11
+    )}`;
+  };
+
+  const handleSaveChanges = async () => {
+    if (!name.trim() || !phone.trim()) {
+      Alert.alert("Campos Vazios", "Por favor, preencha seu nome e telefone.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      let finalAvatarUrl = user.avatar;
+      // Verifica se o avatar foi alterado (se é um URI local)
+      if (avatarUri !== user.avatar) {
+        finalAvatarUrl = await uploadImage(avatarUri);
+      }
+
+      await updateUser({ name, phone, avatar: finalAvatarUrl });
+      Alert.alert("Sucesso!", "Seu perfil foi atualizado.");
+      router.back();
+    } catch (error) {
+      console.error("Erro ao atualizar perfil:", error);
+      Alert.alert(
+        "Erro",
+        "Não foi possível atualizar seu perfil. Tente novamente."
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Editar Perfil</Text>
-          <Pressable onPress={() => router.back()}>
-            <Ionicons name="close-circle" size={32} color="#e5e7eb" />
-          </Pressable>
-        </View>
+    <View style={styles.appContainer}>
+      <StatusBar barStyle="light-content" backgroundColor="#003249" />
+      <Header />
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <ScrollView contentContainerStyle={styles.scrollContainer}>
+          <View style={styles.avatarSection}>
+            <Image source={{ uri: avatarUri }} style={styles.avatar} />
+            <TouchableOpacity
+              style={styles.editIconContainer}
+              onPress={pickImage}
+            >
+              <Ionicons name="camera-reverse-outline" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
 
-        <View style={styles.avatarContainer}>
-          <Image source={{ uri: avatar }} style={styles.avatar} />
-          <Pressable onPress={pickImage}>
-            <Text style={styles.changePhotoButton}>Alterar Foto</Text>
-          </Pressable>
-        </View>
+          <View style={styles.form}>
+            <View style={styles.inputContainer}>
+              <Ionicons
+                name="person-outline"
+                size={22}
+                color="#888"
+                style={styles.inputIcon}
+              />
+              <TextInput
+                value={name}
+                onChangeText={setName}
+                style={styles.input}
+                placeholder="Nome Completo"
+              />
+            </View>
 
-        <View style={styles.form}>
-          <Text style={styles.inputLabel}>Nome Completo</Text>
-          <TextInput value={name} onChangeText={setName} style={styles.input} />
+            <View style={styles.inputContainer}>
+              <Ionicons
+                name="call-outline"
+                size={22}
+                color="#888"
+                style={styles.inputIcon}
+              />
+              <TextInput
+                value={phone}
+                onChangeText={(text) => setPhone(formatPhone(text))}
+                style={styles.input}
+                keyboardType="phone-pad"
+                maxLength={15}
+                placeholder="(99) 99999-9999"
+              />
+            </View>
 
-          <Text style={styles.inputLabel}>Telefone</Text>
-          <TextInput
-            value={phone}
-            onChangeText={setPhone}
-            style={styles.input}
-            keyboardType="phone-pad"
-          />
+            <View
+              style={[styles.inputContainer, styles.inputDisabledContainer]}
+            >
+              <Ionicons
+                name="mail-outline"
+                size={22}
+                color="#888"
+                style={styles.inputIcon}
+              />
+              <TextInput
+                value={user.email}
+                style={[styles.input, styles.inputDisabled]}
+                editable={false}
+              />
+            </View>
+          </View>
 
-          <Text style={styles.inputLabel}>Email (não editável)</Text>
-          <TextInput
-            value={email}
-            style={[styles.input, styles.inputDisabled]}
-            editable={false}
-          />
-        </View>
-
-        <Pressable style={styles.saveButton} onPress={handleSaveChanges}>
-          <Text style={styles.saveButtonText}>Salvar Alterações</Text>
-        </Pressable>
-      </ScrollView>
-    </SafeAreaView>
+          <TouchableOpacity
+            style={[styles.saveButton, isLoading && styles.buttonDisabled]}
+            onPress={handleSaveChanges}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="save-outline" size={22} color="#fff" />
+                <Text style={styles.saveButtonText}>Salvar Alterações</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#fff" },
-  container: { padding: 20 },
-  header: {
+  appContainer: { flex: 1, backgroundColor: "#FAF9F6" },
+  loaderContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+  safeArea: { backgroundColor: "#003249" },
+  headerContainer: {
+    height: 60,
+    backgroundColor: "#003249",
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 20,
+    justifyContent: "space-between",
   },
-  headerTitle: { fontSize: 24, fontWeight: "bold" },
-  avatarContainer: { alignItems: "center", marginVertical: 20 },
+  headerTitle: { color: "#fff", fontSize: 18, fontWeight: "bold" },
+  headerIcon: { padding: 10, width: 50 },
+  scrollContainer: { padding: 20 },
+  avatarSection: {
+    alignItems: "center",
+    marginVertical: 20,
+    position: "relative",
+  },
   avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    marginBottom: 10,
-    borderWidth: 3,
-    borderColor: "#f3f4f6",
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 4,
+    borderColor: "#fff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
   },
-  changePhotoButton: {
-    color: "#9C6ADE",
-    fontWeight: "bold",
-    fontSize: 16,
-    padding: 5,
+  editIconContainer: {
+    position: "absolute",
+    bottom: 0,
+    right: "30%",
+    backgroundColor: "#003249",
+    padding: 8,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: "#fff",
   },
   form: { marginBottom: 30 },
-  inputLabel: {
-    fontSize: 14,
-    color: "#6b7280",
-    marginBottom: 8,
-    marginTop: 20,
+  inputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    marginBottom: 15,
+    shadowColor: "#9E9E9E",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  inputIcon: {
+    paddingHorizontal: 15,
   },
   input: {
-    backgroundColor: "#f9fafb",
-    padding: 16,
-    borderRadius: 12,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  inputDisabled: { backgroundColor: "#e5e7eb", color: "#6b7280" },
-  saveButton: {
-    backgroundColor: "#9C6ADE",
+    flex: 1,
     paddingVertical: 18,
-    borderRadius: 99,
-    justifyContent: "center",
-    alignItems: "center",
+    paddingRight: 18,
+    fontSize: 16,
+    color: "#333",
   },
-  saveButtonText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
+  inputDisabledContainer: {
+    backgroundColor: "#f0f0f0",
+  },
+  inputDisabled: {
+    color: "#888",
+  },
+  saveButton: {
+    backgroundColor: "#003249",
+    padding: 18,
+    borderRadius: 16,
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 10,
+  },
+  buttonDisabled: {
+    backgroundColor: "#a9a9a9",
+  },
+  saveButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
 });

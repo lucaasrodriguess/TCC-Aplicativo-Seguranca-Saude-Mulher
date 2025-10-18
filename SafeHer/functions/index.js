@@ -10,6 +10,12 @@ admin.initializeApp();
 
 const { CUIDAI_API_KEY } = process.env;
 
+const prompts = {
+  ciclo: `Você é Clara, uma assistente especialista em saúde menstrual...`, // Seu prompt de ciclo aqui
+  psicologico: `Você é Clara, uma conselheira de bem-estar e apoio emocional...`, // Seu prompt psicológico aqui
+  default: `Você é Clara, uma assistente de saúde virtual empática...`, // Seu prompt padrão aqui
+};
+
 const app = express();
 app.use(cors({ origin: true }));
 app.use(bodyParser.json());
@@ -24,28 +30,34 @@ app.post("/chatbot", async (req, res) => {
       .json({ error: "Configuração do servidor incompleta." });
   }
 
-  const { message, userId } = req.body;
+  const { message, userId, context } = req.body;
   if (!message || !userId) {
     return res
       .status(400)
       .json({ error: "Os campos 'message' e 'userId' são obrigatórios." });
   }
 
-  if (!chatHistories[userId]) {
-    chatHistories[userId] = [
-      `Você é Clara, uma assistente de saúde virtual empática...`,
-    ];
-  }
-  chatHistories[userId].push(message);
+  // ===================================================================
+  // ### A CORREÇÃO DA MEMÓRIA ESTÁ AQUI ###
+  // Criamos uma chave única para cada contexto de conversa do usuário.
+  // ===================================================================
+  const historyKey = `${userId}_${context || "default"}`;
 
-  // ===================================================================
-  // ### A CORREÇÃO FINAL ESTÁ AQUI ###
-  // Usando 'gemini-flash-latest', um modelo que está na sua lista de permissões.
-  // ===================================================================
+  if (!chatHistories[historyKey]) {
+    const selectedPrompt = prompts[context] || prompts.default;
+    chatHistories[historyKey] = [selectedPrompt];
+  }
+  chatHistories[historyKey].push(message);
+
+  const fullHistory = chatHistories[historyKey];
+  const systemPrompt = fullHistory[0];
+  const recentMessages = fullHistory.slice(-10);
+  const contextToSend = [systemPrompt, ...recentMessages];
+
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${CUIDAI_API_KEY}`;
 
   const body = {
-    contents: chatHistories[userId].map((msg, index) => ({
+    contents: contextToSend.map((msg, index) => ({
       role: index % 2 === 0 ? "user" : "model",
       parts: [{ text: msg }],
     })),
@@ -73,7 +85,7 @@ app.post("/chatbot", async (req, res) => {
     const reply =
       data.candidates?.[0]?.content?.parts?.[0]?.text ||
       "Desculpe, não consegui gerar uma resposta.";
-    chatHistories[userId].push(reply);
+    chatHistories[historyKey].push(reply); // Salva no histórico correto
 
     return res.json({ reply });
   } catch (error) {

@@ -1,18 +1,51 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useNavigation, useRouter } from "expo-router";
 import React, { useContext } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Image,
-  Pressable,
   SafeAreaView,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
+
+import { DrawerActions } from "@react-navigation/native";
 import { UserContext, UserContextType } from "../../contexts/UserContext";
 
+// --- COMPONENTE DE CABEÇALHO PADRÃO ---
+const Header = () => {
+  const navigation = useNavigation();
+  const { user } = useContext(UserContext) as UserContextType;
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.headerContainer}>
+        <TouchableOpacity
+          onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+          style={styles.headerIcon}
+        >
+          <Ionicons name="menu" size={28} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Meu Perfil</Text>
+        <TouchableOpacity
+          onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+          style={styles.headerIcon}
+        >
+          {user?.avatar && (
+            <Image source={{ uri: user.avatar }} style={styles.avatarSmall} />
+          )}
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+  );
+};
+
+// --- COMPONENTE PARA LINHA DE INFORMAÇÃO ---
 const InfoRow = ({
   icon,
   label,
@@ -20,26 +53,37 @@ const InfoRow = ({
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
-  value: string;
+  value: string | null;
 }) => (
   <View style={styles.infoRow}>
-    <Ionicons name={icon} size={22} color="#8e8e93" style={styles.infoIcon} />
+    <Ionicons name={icon} size={22} color="#003249" style={styles.infoIcon} />
     <View>
       <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
+      <Text style={styles.infoValue}>{value || "Não informado"}</Text>
     </View>
   </View>
 );
 
+// --- TELA PRINCIPAL ---
 export default function ProfileScreen() {
   const context = useContext(UserContext) as UserContextType;
   const router = useRouter();
 
-  if (!context || !context.user) {
-    // Idealmente, redirecionaria para o login se não houver usuário
+  if (!context || context.isLoading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <Text>Usuário não encontrado. Por favor, faça login novamente.</Text>
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" color="#003249" />
+      </View>
+    );
+  }
+
+  if (!context.user) {
+    // A lógica do _layout raiz já deve ter redirecionado, mas é uma segurança extra.
+    return (
+      <SafeAreaView style={styles.appContainer}>
+        <Text style={{ textAlign: "center", marginTop: 50 }}>
+          Usuário não encontrado.
+        </Text>
       </SafeAreaView>
     );
   }
@@ -49,29 +93,19 @@ export default function ProfileScreen() {
   const handleLogout = () => {
     Alert.alert("Sair da Conta", "Você tem certeza que deseja sair?", [
       { text: "Cancelar", style: "cancel" },
-      {
-        text: "Sair",
-        style: "destructive",
-        onPress: () => {
-          logout();
-
-          router.replace("../auth/loginscreen");
-        },
-      },
+      { text: "Sair", style: "destructive", onPress: logout },
     ]);
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="close-circle" size={32} color="#e5e7eb" />
-          </Pressable>
-        </View>
-
+    <View style={styles.appContainer}>
+      <StatusBar barStyle="light-content" backgroundColor="#003249" />
+      <Header />
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.profileHeader}>
-          <Image source={{ uri: user.avatar }} style={styles.avatar} />
+          <View style={styles.avatarContainer}>
+            <Image source={{ uri: user.avatar }} style={styles.avatarLarge} />
+          </View>
           <Text style={styles.name}>{user.name}</Text>
         </View>
 
@@ -86,77 +120,111 @@ export default function ProfileScreen() {
           <InfoRow icon="call-outline" label="Telefone" value={user.phone} />
         </View>
 
-        <Pressable
-          style={styles.editButton}
-          onPress={() => router.push("./edit-profile")}
+        <TouchableOpacity
+          style={styles.actionButtonPrimary}
+          onPress={() => router.push("/(main)/edit-profile")}
         >
           <Ionicons name="pencil-outline" size={20} color="#fff" />
-          <Text style={styles.editButtonText}>Editar Perfil</Text>
-        </Pressable>
+          <Text style={styles.actionButtonText}>Editar Perfil</Text>
+        </TouchableOpacity>
 
-        <Pressable style={styles.logoutButton} onPress={handleLogout}>
-          <Ionicons name="log-out-outline" size={22} color="#9C6ADE" />
-          <Text style={styles.logoutButtonText}>Sair</Text>
-        </Pressable>
+        <TouchableOpacity
+          style={styles.actionButtonSecondary}
+          onPress={handleLogout}
+        >
+          <Ionicons name="log-out-outline" size={22} color="#FF6B6B" />
+          <Text style={[styles.actionButtonText, { color: "#FF6B6B" }]}>
+            Sair
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#f9fafb" },
-  container: { paddingBottom: 40 },
-  header: { alignItems: "flex-end", padding: 16 },
-  backButton: { padding: 5 },
+  appContainer: { flex: 1, backgroundColor: "#FAF9F6" },
+  loaderContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+  safeArea: { backgroundColor: "#003249" },
+  headerContainer: {
+    height: 60,
+    backgroundColor: "#003249",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 10,
+  },
+  headerTitle: { color: "#fff", fontSize: 18, fontWeight: "bold" },
+  headerIcon: { padding: 8 },
+  avatarSmall: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: "#fff",
+  },
+  scrollContainer: {
+    paddingBottom: 40,
+    paddingHorizontal: 20,
+  },
   profileHeader: {
     alignItems: "center",
     paddingVertical: 20,
     marginBottom: 10,
   },
-  avatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 4,
-    borderColor: "#fff",
+  avatarContainer: {
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 10,
     elevation: 10,
+    backgroundColor: "#FAF9F6", // Cor de fundo para a sombra funcionar
+    borderRadius: 60,
+  },
+  avatarLarge: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 4,
+    borderColor: "#fff",
   },
   name: {
     fontSize: 26,
     fontWeight: "bold",
     marginTop: 16,
     color: "#1f2937",
+    textAlign: "center",
   },
   card: {
     backgroundColor: "#fff",
     borderRadius: 16,
     paddingHorizontal: 20,
-    paddingVertical: 10,
-    marginHorizontal: 20,
-    marginTop: 20,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
+    paddingTop: 20,
+    paddingBottom: 10,
+    marginTop: 10,
+    shadowColor: "#9E9E9E",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    elevation: 4,
   },
   cardTitle: {
     fontSize: 16,
     fontWeight: "600",
     color: "#374151",
-    marginBottom: 15,
+    marginBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: "#f3f4f6",
-    paddingBottom: 15,
+    paddingBottom: 10,
   },
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 10,
+    paddingVertical: 15,
   },
   infoIcon: {
     marginRight: 20,
+    width: 22, // Garante alinhamento
   },
   infoLabel: {
     color: "#6b7280",
@@ -168,41 +236,30 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
   },
-  editButton: {
+  actionButtonPrimary: {
     flexDirection: "row",
-    backgroundColor: "#9C6ADE",
-    paddingVertical: 16,
-    borderRadius: 99,
-    margin: 20,
+    backgroundColor: "#003249",
+    paddingVertical: 18,
+    borderRadius: 16,
+    marginTop: 30,
     justifyContent: "center",
     alignItems: "center",
     gap: 10,
-    shadowColor: "#9C6ADE",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 8,
   },
-  editButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  logoutButton: {
+  actionButtonSecondary: {
     flexDirection: "row",
     backgroundColor: "#fff",
-    paddingVertical: 16,
-    borderRadius: 99,
-    marginHorizontal: 20,
-    marginBottom: 20,
+    paddingVertical: 18,
+    borderRadius: 16,
+    marginTop: 15,
     justifyContent: "center",
     alignItems: "center",
     gap: 10,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#FF6B6B",
   },
-  logoutButtonText: {
-    color: "#9C6ADE",
+  actionButtonText: {
+    color: "#fff",
     fontSize: 16,
     fontWeight: "bold",
   },

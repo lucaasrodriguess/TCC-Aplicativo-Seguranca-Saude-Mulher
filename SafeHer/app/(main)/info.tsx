@@ -1,79 +1,127 @@
-import { Ionicons } from "@expo/vector-icons"; // ícones nativos do Expo
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React from "react";
+import {
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
-export default function InfoScreen() {
+// --- DADOS DA LEGENDA ---
+const legendItems = [
+  { color: "#FFB6C1", label: "Dias de Menstruação" },
+  { color: "#98FB98", label: "Período Fértil" },
+  { color: "#ADD8E6", label: "Dia da Ovulação" },
+  { color: "#D3D3D3", label: "Próxima Menstruação (Previsão)" },
+];
+
+// --- COMPONENTE DE CABEÇALHO ---
+const Header = () => {
   const router = useRouter();
-
   return (
-    <View style={styles.container}>
-      {/* Fundo com blur */}
-
-      <View style={styles.content}>
-        {/* Botão de Voltar */}
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.headerContainer}>
         <TouchableOpacity
-          style={styles.backButton}
           onPress={() => router.back()}
+          style={styles.headerIcon}
         >
-          <Ionicons name="arrow-back" size={24} color="#9333ea" />
-          <Text style={styles.backText}>Voltar</Text>
+          <Ionicons name="chevron-back" size={28} color="#fff" />
         </TouchableOpacity>
-
-        <Text style={styles.title}>Informações do Calendário</Text>
-
-        <View style={styles.card}>
-          <Text style={styles.item}>🔴 Vermelho: Dias de Menstruação</Text>
-          <Text style={styles.item}>🟢 Verde Claro: Período Fértil</Text>
-          <Text style={styles.item}>🟣 Roxo: Dia da Ovulação</Text>
-          <Text style={styles.item}>
-            ⚪ Cinza: Próxima Menstruação Prevista
-          </Text>
-        </View>
+        <Text style={styles.headerTitle}>Legenda do Calendário</Text>
+        <View style={styles.headerIcon} />
       </View>
+    </SafeAreaView>
+  );
+};
+
+// --- TELA PRINCIPAL ---
+export default function InfoScreen() {
+  return (
+    <View style={styles.appContainer}>
+      <StatusBar barStyle="light-content" backgroundColor="#003249" />
+      <Header />
+      <ScrollView contentContainerStyle={styles.contentContainer}>
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Entenda as Cores</Text>
+          {legendItems.map((item) => (
+            <View key={item.label} style={styles.legendItem}>
+              <View
+                style={[styles.legendDot, { backgroundColor: item.color }]}
+              />
+              <Text style={styles.legendText}>{item.label}</Text>
+            </View>
+          ))}
+        </View>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  appContainer: {
     flex: 1,
+    backgroundColor: "#FAF9F6",
   },
-  content: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 40,
+  safeArea: {
+    backgroundColor: "#003249",
   },
-  backButton: {
+  headerContainer: {
+    height: 60,
+    backgroundColor: "#003249",
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
+    justifyContent: "space-between",
   },
-  title: {
-    fontSize: 22,
+  headerTitle: {
+    color: "#fff",
+    fontSize: 18,
     fontWeight: "bold",
-    color: "#333",
-
-    marginBottom: 16,
+  },
+  headerIcon: {
+    padding: 10,
+    width: 50, // Garante espaço para o título ficar centralizado
+  },
+  contentContainer: {
+    padding: 20,
   },
   card: {
-    backgroundColor: "rgba(255,255,255,0.9)",
+    backgroundColor: "#fff",
     borderRadius: 16,
     padding: 20,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowColor: "#9E9E9E",
     shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 4,
   },
-  item: {
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 20,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+  },
+  legendDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    marginRight: 15,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.05)",
+  },
+  legendText: {
     fontSize: 16,
     color: "#444",
-    marginBottom: 12,
-  },
-  backText: {
-    marginLeft: 6,
-    fontSize: 16,
-    color: "#9333ea",
-    fontWeight: "600",
   },
 });

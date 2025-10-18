@@ -12,16 +12,18 @@ import {
   Text,
   View,
 } from "react-native";
-import { UserContext, UserContextType } from "../../contexts/UserContext"; // Ajuste o caminho se necessário
+import CreatePostModal from "../../components/CreatePostModal"; // Importa o Modal
+import { PostModalProvider } from "../../contexts/PostModalContext"; // Importa o Provedor
+import { UserContext, UserContextType } from "../../contexts/UserContext";
 
-// --- COMPONENTE CUSTOMIZADO PARA O CONTEÚDO DO MENU ---
+// --- COMPONENTE CUSTOMIZADO PARA O CONTEÚDO DO MENU (sem alterações) ---
 const CustomDrawerContent = (props: any) => {
   const context = useContext(UserContext) as UserContextType;
   const router = useRouter();
   const user = context?.user;
 
   if (!user) {
-    return null; // Não mostra o conteúdo do menu se o usuário não estiver logado
+    return null;
   }
 
   const navigateTo = (screen: string) => {
@@ -31,7 +33,7 @@ const CustomDrawerContent = (props: any) => {
 
   const handleLogout = () => {
     props.navigation.closeDrawer();
-    context.logout(); // O layout raiz (porteiro) vai detectar a mudança e redirecionar
+    context.logout();
   };
 
   return (
@@ -99,7 +101,7 @@ const CustomDrawerContent = (props: any) => {
 };
 
 // --- NAVEGADOR DRAWER PARA A ÁREA LOGADA ---
-export default function MainAppLayout() {
+const DrawerNavigator = () => {
   return (
     <Drawer
       drawerContent={(props) => <CustomDrawerContent {...props} />}
@@ -119,9 +121,20 @@ export default function MainAppLayout() {
       />
     </Drawer>
   );
+};
+
+// --- LAYOUT PRINCIPAL QUE UNE O PROVEDOR, O NAVEGADOR E O MODAL ---
+export default function MainAppLayout() {
+  return (
+    <PostModalProvider>
+      <DrawerNavigator />
+      {/* O Modal é colocado aqui, fora da navegação, para flutuar sobre tudo */}
+      <CreatePostModal />
+    </PostModalProvider>
+  );
 }
 
-// --- ESTILOS ---
+// --- ESTILOS (sem alterações) ---
 const styles = StyleSheet.create({
   drawerContainer: { flex: 1 },
   drawerHeader: {

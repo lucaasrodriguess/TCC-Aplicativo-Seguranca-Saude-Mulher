@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useContext, useState } from "react";
 import {
@@ -13,7 +14,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-
 import { UserContext, UserContextType } from "../../contexts/UserContext";
 
 export default function LoginScreen() {
@@ -22,37 +22,36 @@ export default function LoginScreen() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false); // NOVO: Estado para visibilidade da senha
 
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   const handleLogin = async () => {
     if (email.trim() === "" || password.trim() === "") {
       setErrorMessage("Por favor, preencha o e-mail e a senha.");
       return;
     }
-
     setErrorMessage("");
     setIsLoading(true);
-
     try {
       await context.login(email, password);
+      // O redirecionamento é tratado pelo _layout principal
     } catch (error: any) {
-      let customMessage = "E-mail ou senha incorretas";
-
       if (
-        error.code === "auth/user-not-found" ||
-        error.code === "auth/wrong-password" ||
-        error.code === "auth/invalid-credential" ||
-        error.code === "auth/invalid-email"
+        [
+          "auth/user-not-found",
+          "auth/wrong-password",
+          "auth/invalid-credential",
+          "auth/invalid-email",
+        ].includes(error.code)
       ) {
-        setErrorMessage(customMessage);
+        setErrorMessage("E-mail ou senha incorretos.");
       } else {
-        setErrorMessage("Ocorreu um erro inesperado ao tentar fazer login.");
+        setErrorMessage("Ocorreu um erro inesperado. Tente novamente.");
         console.error("Erro de Login:", error);
       }
-
-      return;
     } finally {
       setIsLoading(false);
     }
@@ -60,28 +59,22 @@ export default function LoginScreen() {
 
   const handleGoogleLogin = async () => {
     setErrorMessage("");
-    setIsLoading(true);
+    setIsGoogleLoading(true);
     try {
       await context.signInWithGoogle();
     } catch (error: any) {
       setErrorMessage("Ocorreu um erro ao logar com o Google.");
       console.error("Erro de Login com Google:", error);
-      return;
     } finally {
-      setIsLoading(false);
+      setIsGoogleLoading(false);
     }
-  };
-
-  const handleRegisterPress = () => {
-    router.push("/(auth)/RegisterScreen");
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
-        style={styles.keyboardContainer}
+        style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={0}
       >
         <ScrollView
           contentContainerStyle={styles.content}
@@ -94,47 +87,73 @@ export default function LoginScreen() {
               style={styles.logo}
             />
             <Text style={styles.title}>Bem-vinda de volta!</Text>
+            <Text style={styles.subtitle}>Faça login para continuar</Text>
           </View>
 
-          <TextInput
-            style={styles.input}
-            placeholder="E-mail"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            onFocus={() => setErrorMessage("")}
-            returnKeyType="next"
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Senha"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            onFocus={() => setErrorMessage("")}
-            returnKeyType="done"
-          />
+          {/* Input de Email */}
+          <View style={styles.inputContainer}>
+            <Ionicons
+              name="mail-outline"
+              size={22}
+              color="#888"
+              style={styles.inputIcon}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="E-mail"
+              placeholderTextColor="#888"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              onFocus={() => setErrorMessage("")}
+            />
+          </View>
+
+          {/* Input de Senha com Ícone */}
+          <View style={styles.inputContainer}>
+            <Ionicons
+              name="lock-closed-outline"
+              size={22}
+              color="#888"
+              style={styles.inputIcon}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Senha"
+              placeholderTextColor="#888"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!isPasswordVisible} // ALTERADO: Controlado pelo estado
+              onFocus={() => setErrorMessage("")}
+            />
+            <TouchableOpacity
+              onPress={() => setIsPasswordVisible(!isPasswordVisible)}
+              style={styles.eyeIcon}
+            >
+              <Ionicons
+                name={isPasswordVisible ? "eye-off-outline" : "eye-outline"}
+                size={22}
+                color="#888"
+              />
+            </TouchableOpacity>
+          </View>
 
           {errorMessage ? (
-            <Text style={styles.inlineErrorText}>{errorMessage}</Text>
+            <Text style={styles.errorText}>{errorMessage}</Text>
           ) : (
             <View style={styles.errorSpacer} />
           )}
 
-          <TouchableOpacity>
-            <Text style={styles.forgotPasswordText}>Esqueci minha senha</Text>
-          </TouchableOpacity>
-
           <TouchableOpacity
-            style={styles.button}
+            style={styles.mainButton}
             onPress={handleLogin}
             disabled={isLoading}
           >
             {isLoading ? (
               <ActivityIndicator color="#FFF" />
             ) : (
-              <Text style={styles.buttonText}>Login</Text>
+              <Text style={styles.mainButtonText}>Entrar</Text>
             )}
           </TouchableOpacity>
 
@@ -145,21 +164,31 @@ export default function LoginScreen() {
           </View>
 
           <TouchableOpacity
-            style={styles.googleButton}
+            style={styles.secondaryButton}
             onPress={handleGoogleLogin}
-            disabled={isLoading}
+            disabled={isGoogleLoading}
           >
-            <Image
-              source={require("@/assets/images/google-logo.png")}
-              style={styles.googleLogo}
-            />
-            <Text style={styles.googleButtonText}>Entrar com Google</Text>
+            {isGoogleLoading ? (
+              <ActivityIndicator color="#333" />
+            ) : (
+              <>
+                <Image
+                  source={require("@/assets/images/google-logo.png")}
+                  style={styles.googleLogo}
+                />
+                <Text style={styles.secondaryButtonText}>
+                  Entrar com Google
+                </Text>
+              </>
+            )}
           </TouchableOpacity>
 
           <View style={styles.footerContainer}>
             <Text style={styles.footerText}>Não tem uma conta? </Text>
-            <TouchableOpacity onPress={handleRegisterPress}>
-              <Text style={styles.createAccountLink}>Criar conta</Text>
+            <TouchableOpacity
+              onPress={() => router.push("/(auth)/RegisterScreen")}
+            >
+              <Text style={styles.linkText}>Crie uma agora</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -169,93 +198,68 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F8F8F8",
-  },
-  keyboardContainer: {
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: "#FAF9F6" },
   content: {
     flexGrow: 1,
-    alignItems: "center",
     paddingHorizontal: 30,
     paddingVertical: 20,
     justifyContent: "center",
   },
-  headerContainer: { alignItems: "center", marginBottom: 40 },
-  logo: { width: 100, height: 100, resizeMode: "contain", marginBottom: 20 },
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#333",
-    textAlign: "center",
-  },
-  input: {
-    width: "100%",
-    height: 50,
-    backgroundColor: "#FFF",
-    borderRadius: 12,
-    paddingHorizontal: 20,
+  headerContainer: { alignItems: "center", marginBottom: 30 },
+  logo: { width: 80, height: 80, resizeMode: "contain", marginBottom: 15 },
+  title: { fontSize: 28, fontWeight: "bold", color: "#333" },
+  subtitle: { fontSize: 16, color: "#888", marginTop: 8 },
+
+  inputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 16,
     marginBottom: 15,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-    fontSize: 16,
+    shadowColor: "#9E9E9E",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  // ESTILO DO ERRO INLINE
-  inlineErrorText: {
-    width: "100%",
-    color: "#C81E1E", // Cor vermelha de erro
+  inputIcon: { paddingHorizontal: 15 },
+  input: {
+    flex: 1,
+    paddingVertical: 18,
+    fontSize: 16,
+    color: "#333",
+  },
+  eyeIcon: { paddingHorizontal: 15 },
+
+  errorText: {
+    color: "#FF6B6B",
     fontSize: 14,
     fontWeight: "600",
-    textAlign: "left", // Alinhado à esquerda
-    marginBottom: 5, // Espaço menor antes do link "Esqueci minha senha"
+    textAlign: "center",
+    marginBottom: 10,
+    height: 20,
   },
-  // ESPAÇADOR PARA MANTER O LAYOUT
-  errorSpacer: {
-    height: 14 + 5,
-  },
-  forgotPasswordText: {
-    color: "#9C6ADE",
-    fontSize: 14,
-    textAlign: "right",
-    width: "100%",
-    marginBottom: 15,
-    fontWeight: "500",
-  },
-  button: {
-    width: "100%",
-    height: 50,
-    backgroundColor: "#9C6ADE",
-    borderRadius: 25,
+  errorSpacer: { height: 20, marginBottom: 10 },
+
+  mainButton: {
+    backgroundColor: "#003249",
+    padding: 18,
+    borderRadius: 16,
     alignItems: "center",
-    justifyContent: "center",
     marginTop: 10,
-    shadowColor: "#9C6ADE",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 8,
   },
-  buttonText: { color: "#FFF", fontWeight: "bold", fontSize: 16 },
-  footerContainer: {
-    flexDirection: "row",
-    marginTop: 30,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 20,
-  },
-  footerText: { fontSize: 14, color: "#555" },
-  createAccountLink: { color: "#9C6ADE", fontWeight: "bold", fontSize: 14 },
+  mainButtonText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
+
   separatorContainer: {
     flexDirection: "row",
     alignItems: "center",
     width: "100%",
-    marginVertical: 20,
+    marginVertical: 25,
   },
   line: { flex: 1, height: 1, backgroundColor: "#e0e0e0" },
   separatorText: { marginHorizontal: 10, color: "#888" },
-  googleButton: {
+
+  secondaryButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -263,10 +267,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e0e0e0",
     width: "100%",
-    height: 50,
-    borderRadius: 25,
+    padding: 18,
+    borderRadius: 16,
     marginBottom: 10,
   },
-  googleLogo: { width: 24, height: 24, marginRight: 10 },
-  googleButtonText: { color: "#333", fontWeight: "bold", fontSize: 16 },
+  googleLogo: { width: 22, height: 22, marginRight: 12 },
+  secondaryButtonText: { color: "#333", fontWeight: "bold", fontSize: 16 },
+
+  footerContainer: {
+    flexDirection: "row",
+    marginTop: 30,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  footerText: { fontSize: 14, color: "#555" },
+  linkText: { color: "#FF6B6B", fontWeight: "bold", fontSize: 14 },
 });

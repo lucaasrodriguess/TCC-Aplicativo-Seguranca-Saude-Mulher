@@ -4,10 +4,10 @@ import { useRouter } from "expo-router";
 import React, { useContext, useState } from "react";
 import {
   ActivityIndicator,
-  Image, // Importar Platform para ajustes específicos do iOS
+  Image,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView, // NOVO
+  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,13 +17,49 @@ import {
 } from "react-native";
 import { UserContext, UserContextType } from "../../contexts/UserContext";
 
+// NOVO: Componente para validar a força da senha em tempo real
+const PasswordStrengthIndicator = ({ password }: { password: string }) => {
+  const hasMinLength = password.length >= 6;
+  const hasUpperCase = /[A-Z]/.test(password);
+  const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+
+  const Requirement = ({ met, text }: { met: boolean; text: string }) => (
+    <View style={styles.requirementRow}>
+      <Ionicons
+        name={met ? "checkmark-circle" : "close-circle"}
+        size={16}
+        color={met ? "#10B981" : "#EF4444"}
+      />
+      <Text
+        style={[styles.requirementText, { color: met ? "#10B981" : "#6B7280" }]}
+      >
+        {text}
+      </Text>
+    </View>
+  );
+
+  return (
+    <View style={styles.passwordRequirementsContainer}>
+      <Requirement met={hasMinLength} text="Pelo menos 6 caracteres" />
+      <Requirement met={hasUpperCase} text="Uma letra maiúscula" />
+      <Requirement met={hasSpecialChar} text="Um caractere especial (!@#...)" />
+    </View>
+  );
+};
+
 export default function RegisterScreen() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [imageUri, setImageUri] = useState<string | null>(null);
+
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] =
+    useState(false);
+
   const [errorMessage, setErrorMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const router = useRouter();
   const context = useContext(UserContext) as UserContextType;
@@ -33,69 +69,65 @@ export default function RegisterScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 1,
+      quality: 0.7,
     });
-
     if (!result.canceled) {
       setImageUri(result.assets[0].uri);
     }
   };
 
   const handleRegister = async () => {
-    if (password !== confirmPassword) {
-      setErrorMessage("As senhas não coincidem!");
-      return;
-    }
     if (!fullName || !email || !password) {
       setErrorMessage("Por favor, preencha todos os campos.");
       return;
     }
+    if (password !== confirmPassword) {
+      setErrorMessage("As senhas não coincidem!");
+      return;
+    }
     setErrorMessage("");
-
+    setIsLoading(true);
     try {
       await context.register(fullName, email, password, imageUri);
-      router.replace("../(main)/(tabs)");
+      // O redirecionamento é tratado pelo _layout
     } catch (error: any) {
       if (error.code === "auth/email-already-in-use") {
-        setErrorMessage("Este email já está a ser utilizado.");
+        setErrorMessage("Este e-mail já está sendo utilizado.");
       } else if (error.code === "auth/weak-password") {
-        setErrorMessage("A senha deve ter pelo menos 6 caracteres.");
+        setErrorMessage("A senha é muito fraca. Siga os requisitos.");
       } else {
         setErrorMessage("Ocorreu um erro ao criar a conta.");
         console.error(error);
       }
+    } finally {
+      setIsLoading(false);
     }
-  };
-
-  const handleSignInPress = () => {
-    router.push("/LoginScreen");
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* NOVO: KeyboardAvoidingView para mover o conteúdo
-        'behavior' é necessário, e 'padding' ou 'position' são comuns.
-        'padding' funciona melhor com ScrollView
-      */}
       <KeyboardAvoidingView
-        style={styles.keyboardContainer}
+        style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={0}
       >
-        {/* NOVO: ScrollView para permitir rolagem quando o teclado estiver aberto */}
         <ScrollView
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled" // Garante que o toque não feche o teclado imediatamente
+          keyboardShouldPersistTaps="handled"
         >
-          <Image
-            source={require("../../assets/images/logo.png")}
-            style={styles.logo}
-          />
-          <Text style={styles.title}>Bem-vinda!</Text>
-          <Text style={styles.subtitle}>
-            Cuidar da sua saúde e garantir sua segurança é o que nos move.
-          </Text>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backButton}
+          >
+            <Ionicons name="chevron-back" size={28} color="#333" />
+          </TouchableOpacity>
+
+          <View style={styles.headerContainer}>
+            <Text style={styles.title}>Crie sua Conta</Text>
+            <Text style={styles.subtitle}>
+              Junte-se à nossa comunidade de apoio
+            </Text>
+          </View>
 
           <TouchableOpacity
             style={styles.imagePickerContainer}
@@ -105,65 +137,128 @@ export default function RegisterScreen() {
               <Image source={{ uri: imageUri }} style={styles.profileImage} />
             ) : (
               <View style={styles.placeholderContainer}>
-                <Ionicons name="camera" size={30} color="#9C6ADE" />
-                <Text style={styles.placeholderText}>Adicionar Foto</Text>
+                <Ionicons name="camera-outline" size={30} color="#003249" />
               </View>
             )}
+            <View style={styles.editIconContainer}>
+              <Ionicons name="add" size={18} color="#fff" />
+            </View>
           </TouchableOpacity>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Nome Completo"
-            value={fullName}
-            onChangeText={setFullName}
-            returnKeyType="next"
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="E-mail"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            returnKeyType="next"
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Insira sua senha"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            returnKeyType="next"
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Confirme sua senha"
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            secureTextEntry
-            returnKeyType="done"
-          />
+          {/* Inputs */}
+          <View style={styles.inputContainer}>
+            <Ionicons
+              name="person-outline"
+              size={22}
+              color="#888"
+              style={styles.inputIcon}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Nome Completo"
+              value={fullName}
+              onChangeText={setFullName}
+            />
+          </View>
+          <View style={styles.inputContainer}>
+            <Ionicons
+              name="mail-outline"
+              size={22}
+              color="#888"
+              style={styles.inputIcon}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="E-mail"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+          </View>
+          <View style={styles.inputContainer}>
+            <Ionicons
+              name="lock-closed-outline"
+              size={22}
+              color="#888"
+              style={styles.inputIcon}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Crie uma senha"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!isPasswordVisible}
+            />
+            <TouchableOpacity
+              onPress={() => setIsPasswordVisible(!isPasswordVisible)}
+              style={styles.eyeIcon}
+            >
+              <Ionicons
+                name={isPasswordVisible ? "eye-off-outline" : "eye-outline"}
+                size={22}
+                color="#888"
+              />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.inputContainer}>
+            <Ionicons
+              name="lock-closed-outline"
+              size={22}
+              color="#888"
+              style={styles.inputIcon}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Confirme sua senha"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry={!isConfirmPasswordVisible}
+            />
+            <TouchableOpacity
+              onPress={() =>
+                setIsConfirmPasswordVisible(!isConfirmPasswordVisible)
+              }
+              style={styles.eyeIcon}
+            >
+              <Ionicons
+                name={
+                  isConfirmPasswordVisible ? "eye-off-outline" : "eye-outline"
+                }
+                size={22}
+                color="#888"
+              />
+            </TouchableOpacity>
+          </View>
+
+          {password.length > 0 && (
+            <PasswordStrengthIndicator password={password} />
+          )}
 
           {errorMessage ? (
-            <Text style={styles.errorMessage}>{errorMessage}</Text>
-          ) : null}
+            <Text style={styles.errorText}>{errorMessage}</Text>
+          ) : (
+            <View style={styles.errorSpacer} />
+          )}
 
           <TouchableOpacity
-            style={styles.button}
+            style={styles.mainButton}
             onPress={handleRegister}
-            disabled={context.isLoading}
+            disabled={isLoading}
           >
-            {context.isLoading ? (
+            {isLoading ? (
               <ActivityIndicator color="#FFF" />
             ) : (
-              <Text style={styles.buttonText}>Registrar</Text>
+              <Text style={styles.mainButtonText}>Criar Conta</Text>
             )}
           </TouchableOpacity>
 
           <View style={styles.footerContainer}>
             <Text style={styles.footerText}>Já tem uma conta? </Text>
-            <TouchableOpacity onPress={handleSignInPress}>
-              <Text style={styles.signIn}>Sign In</Text>
+            <TouchableOpacity
+              onPress={() => router.push("/(auth)/LoginScreen")}
+            >
+              <Text style={styles.linkText}>Faça Login</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -173,122 +268,99 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F8F8F8",
-    // Removido justifyContent: "center" do container principal
-  },
-  // NOVO: Estilo para o KeyboardAvoidingView ocupar todo o espaço
-  keyboardContainer: {
-    flex: 1,
-  },
-  // ALTERADO: content agora é o contentContainerStyle do ScrollView
+  container: { flex: 1, backgroundColor: "#FAF9F6" },
   content: {
-    flexGrow: 1, // Permite que o conteúdo cresça e centralize
-    alignItems: "center",
+    flexGrow: 1,
     paddingHorizontal: 30,
-    paddingVertical: 20, // Adicionado padding vertical para telas pequenas
-    justifyContent: "center", // Mantém o conteúdo centralizado se houver espaço
-  },
-  logo: {
-    width: 60,
-    height: 60,
-    resizeMode: "contain",
-    marginBottom: 15,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#555",
-    textAlign: "center",
-    marginBottom: 20,
-    paddingHorizontal: 10,
-  },
-  imagePickerContainer: {
-    marginBottom: 20,
-    width: 100,
-    height: 100,
+    paddingBottom: 20,
     justifyContent: "center",
-    alignItems: "center",
   },
-  profileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+  backButton: { position: "absolute", top: 20, left: 20, padding: 5 },
+  headerContainer: { alignItems: "center", marginBottom: 20, marginTop: 60 },
+  title: { fontSize: 28, fontWeight: "bold", color: "#333" },
+  subtitle: { fontSize: 16, color: "#888", marginTop: 8, textAlign: "center" },
+
+  imagePickerContainer: {
+    alignSelf: "center",
+    marginBottom: 20,
+    position: "relative",
   },
+  profileImage: { width: 100, height: 100, borderRadius: 50 },
   placeholderContainer: {
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: "#FFF",
+    backgroundColor: "#fff",
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 2,
-    borderColor: "#E0E0E0",
-    borderStyle: "dashed",
-  },
-  placeholderText: {
-    fontSize: 12,
-    color: "#9C6ADE",
-    marginTop: 5,
-  },
-  input: {
-    width: "100%",
-    height: 50,
-    backgroundColor: "#FFF",
-    borderRadius: 12,
-    paddingHorizontal: 20,
-    marginBottom: 15,
     borderWidth: 1,
-    borderColor: "#E0E0E0",
-    fontSize: 16,
+    borderColor: "#e0e0e0",
   },
-  errorMessage: {
-    color: "red",
-    fontSize: 14,
-    marginBottom: 10,
-    textAlign: "center",
-    minHeight: 20,
+  editIconContainer: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    backgroundColor: "#003249",
+    padding: 6,
+    borderRadius: 15,
+    borderWidth: 2,
+    borderColor: "#fff",
   },
-  button: {
-    width: "100%",
-    height: 50,
-    backgroundColor: "#9C6ADE",
-    borderRadius: 25,
+
+  inputContainer: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    marginTop: 10,
-    shadowColor: "#9C6ADE",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 8,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    marginBottom: 15,
+    shadowColor: "#9E9E9E",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  buttonText: {
-    color: "#FFF",
-    fontWeight: "bold",
-    fontSize: 16,
+  inputIcon: { paddingHorizontal: 15 },
+  input: { flex: 1, paddingVertical: 18, fontSize: 16, color: "#333" },
+  eyeIcon: { paddingHorizontal: 15 },
+
+  passwordRequirementsContainer: {
+    marginBottom: 10,
+    paddingHorizontal: 10,
   },
+  requirementRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  requirementText: {
+    marginLeft: 8,
+    fontSize: 13,
+  },
+
+  errorText: {
+    color: "#FF6B6B",
+    fontSize: 14,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 10,
+    height: 20,
+  },
+  errorSpacer: { height: 20, marginBottom: 10 },
+
+  mainButton: {
+    backgroundColor: "#003249",
+    padding: 18,
+    borderRadius: 16,
+    alignItems: "center",
+  },
+  mainButtonText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
+
   footerContainer: {
     flexDirection: "row",
-    marginTop: 20,
+    marginTop: 30,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 20, // Adicionado para dar espaço na parte inferior
   },
-  footerText: {
-    fontSize: 14,
-    color: "#555",
-  },
-  signIn: {
-    color: "#9C6ADE",
-    fontWeight: "bold",
-    fontSize: 14,
-  },
+  footerText: { fontSize: 14, color: "#555" },
+  linkText: { color: "#FF6B6B", fontWeight: "bold", fontSize: 14 },
 });

@@ -1,35 +1,64 @@
-import React, { useState, useRef, useEffect, useContext } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import {
-  View,
-  TextInput,
-  Text,
-  ScrollView,
-  StyleSheet,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
   TouchableOpacity,
-  ActivityIndicator,
+  View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { UserContext, UserContextType } from "../../contexts/UserContext"; // ATENÇÃO: Verifique se o caminho para seu UserContext está correto
+import Markdown from "react-native-markdown-display";
+import { UserContext, UserContextType } from "../../contexts/UserContext";
 
-export default function CuidaiScreen() {
-  const [messages, setMessages] = useState<{ text: string; user: string }[]>(
-    []
+// --- COMPONENTE DE CABEÇALHO ---
+const Header = ({ title }: { title: string }) => {
+  const router = useRouter();
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.headerContainer}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.headerIcon}
+        >
+          <Ionicons name="chevron-back" size={28} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{title}</Text>
+        <View style={styles.headerIcon} />
+      </View>
+    </SafeAreaView>
   );
+};
+
+// --- TELA PRINCIPAL ---
+export default function CuidaiScreen() {
+  const [messages, setMessages] = useState<
+    { text: string; user: "Você" | "Clara" }[]
+  >([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const { user } = useContext(UserContext) as UserContextType;
   const scrollViewRef = useRef<ScrollView>(null);
-  const router = useRouter();
 
-  // URL FINAL E CORRETA da sua API rodando na nuvem!
+  const { context } = useLocalSearchParams<{ context: string }>();
+  const chatContext = context || "default";
+
+  useEffect(() => {
+    // Limpa o histórico ao entrar em um novo contexto de chat
+    setMessages([]);
+  }, [chatContext]);
+
   const API_URL =
     "https://us-central1-tcc-safeher.cloudfunctions.net/api/chatbot";
 
   const sendMessage = async () => {
-    if (!input.trim() || !user) return;
+    if (!input.trim() || !user || loading) return;
 
     const userMessage = input.trim();
     setMessages((prev) => [...prev, { text: userMessage, user: "Você" }]);
@@ -40,32 +69,21 @@ export default function CuidaiScreen() {
       const response = await fetch(API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMessage, userId: user.uid }),
+        body: JSON.stringify({
+          message: userMessage,
+          userId: user.uid,
+          context: chatContext,
+        }),
       });
-
       const data = await response.json();
-
-      if (response.ok && data.reply) {
-        setMessages((prev) => [...prev, { text: data.reply, user: "Clara" }]);
-      } else {
-        // Mostra o erro detalhado que vem do servidor, se houver
-        const errorMessage =
-          data.details?.error?.message ||
-          data.error ||
-          "Resposta inválida do servidor.";
-        setMessages((prev) => [
-          ...prev,
-          {
-            text: `⚠️ Erro do servidor: ${errorMessage}`,
-            user: "Clara",
-          },
-        ]);
-      }
-    } catch (error: any) {
+      const reply =
+        data.reply || `⚠️ Erro: ${data.error || "Resposta inválida."}`;
+      setMessages((prev) => [...prev, { text: reply, user: "Clara" }]);
+    } catch (error) {
       setMessages((prev) => [
         ...prev,
         {
-          text: "❌ Não foi possível conectar à assistente. Verifique sua conexão com a internet e tente novamente.",
+          text: "❌ Não foi possível conectar. Verifique sua internet.",
           user: "Clara",
         },
       ]);
@@ -78,148 +96,170 @@ export default function CuidaiScreen() {
     scrollViewRef.current?.scrollToEnd({ animated: true });
   }, [messages, loading]);
 
-  return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0} // Ajuste fino para o teclado
-    >
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={styles.backButton}
-        >
-          <Ionicons name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Assistente de Saúde Clara</Text>
-        <View style={{ width: 40 }} />
-        {/* Espaço para centralizar o título */}
-      </View>
+  const getHeaderTitle = () => {
+    if (chatContext === "ciclo") return "Saúde da Mulher";
+    return "Apoio Psicológico";
+  };
 
-      <ScrollView
-        style={styles.chatBox}
-        contentContainerStyle={{ paddingBottom: 10 }}
-        ref={scrollViewRef}
+  const getInitialMessage = () => {
+    if (chatContext === "ciclo")
+      return "Olá! Sou a Clara, sua assistente virtual de saúde. Como posso te ajudar com seu ciclo menstrual hoje?";
+    return "Olá! Sou a Clara, sua assistente de apoio. Sinta-se à vontade para desabafar ou tirar dúvidas. Como você está se sentindo?";
+  };
+
+  return (
+    <View style={styles.appContainer}>
+      <StatusBar barStyle="light-content" backgroundColor="#003249" />
+      <Header title={getHeaderTitle()} />
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
       >
-        {messages.length === 0 && !loading && (
-          <View style={[styles.messageBubble, styles.botBubble]}>
-            <Text style={styles.botText}>
-              Olá! Sou a Clara, sua assistente de saúde virtual. Lembre-se que
-              não forneço diagnósticos. Como posso te ajudar hoje?
-            </Text>
-          </View>
-        )}
-        {messages.map((msg, index) => (
-          <View
-            key={index}
-            style={[
-              styles.messageBubble,
-              msg.user === "Você" ? styles.userBubble : styles.botBubble,
-            ]}
-          >
-            <Text
-              style={msg.user === "Você" ? styles.userText : styles.botText}
-            >
-              {msg.text}
-            </Text>
-          </View>
-        ))}
-        {loading && (
-          <View style={[styles.messageBubble, styles.botBubble]}>
-            <ActivityIndicator size="small" color="#fff" />
-          </View>
-        )}
-      </ScrollView>
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.input}
-          value={input}
-          onChangeText={setInput}
-          placeholder="Digite sua dúvida..."
-          placeholderTextColor="#999"
-          editable={!loading && !!user}
-        />
-        <TouchableOpacity
-          style={[
-            styles.sendButton,
-            (!user || loading || !input.trim()) && { backgroundColor: "#ccc" },
-          ]}
-          onPress={sendMessage}
-          disabled={!user || loading || !input.trim()}
+        <ScrollView
+          style={styles.chatContainer}
+          contentContainerStyle={{ paddingBottom: 10 }}
+          ref={scrollViewRef}
         >
-          <Ionicons name="send" size={20} color="#fff" />
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+          {/* Mensagem Inicial da CuidAI */}
+          <View style={[styles.messageBubble, styles.botBubble]}>
+            <Markdown style={markdownStyles}>{getInitialMessage()}</Markdown>
+          </View>
+
+          {messages.map((msg, index) => (
+            <View
+              key={index}
+              style={[
+                styles.messageBubble,
+                msg.user === "Você" ? styles.userBubble : styles.botBubble,
+              ]}
+            >
+              {msg.user === "Clara" ? (
+                <Markdown style={markdownStyles}>{msg.text}</Markdown>
+              ) : (
+                <Text style={styles.userText}>{msg.text}</Text>
+              )}
+            </View>
+          ))}
+          {loading && (
+            <View
+              style={[
+                styles.messageBubble,
+                styles.botBubble,
+                styles.typingIndicator,
+              ]}
+            >
+              <ActivityIndicator size="small" color="#fff" />
+            </View>
+          )}
+        </ScrollView>
+        <View style={styles.inputBar}>
+          <TextInput
+            style={styles.textInput}
+            value={input}
+            onChangeText={setInput}
+            placeholder="Digite sua mensagem..."
+            placeholderTextColor="#999"
+            editable={!loading && !!user}
+            multiline
+          />
+          <TouchableOpacity
+            style={[
+              styles.sendButton,
+              (!user || loading || !input.trim()) && styles.buttonDisabled,
+            ]}
+            onPress={sendMessage}
+            disabled={!user || loading || !input.trim()}
+          >
+            <Ionicons name="arrow-up" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
+const markdownStyles = StyleSheet.create({
+  body: { color: "#fff", fontSize: 16 },
+  strong: { fontWeight: "bold" },
+  list_item: { color: "#fff", fontSize: 16, marginVertical: 4 },
+  link: { color: "#ADD8E6", textDecorationLine: "underline" },
+});
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  header: {
+  appContainer: { flex: 1, backgroundColor: "#FAF9F6" },
+  safeArea: { backgroundColor: "#003249" },
+  headerContainer: {
+    height: 60,
+    backgroundColor: "#003249",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingTop: Platform.OS === "android" ? 40 : 50,
-    paddingBottom: 10,
+  },
+  headerTitle: { color: "#fff", fontSize: 18, fontWeight: "bold" },
+  headerIcon: { padding: 10, width: 50 },
+  container: { flex: 1, backgroundColor: "#FAF9F6" },
+
+  chatContainer: {
+    flex: 1,
     paddingHorizontal: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
+    paddingTop: 10,
   },
-  backButton: {
-    padding: 5,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  chatBox: { flex: 1, paddingHorizontal: 10, paddingTop: 10 },
-  inputContainer: {
+  inputBar: {
     flexDirection: "row",
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderTopWidth: 1,
     borderColor: "#e0e0e0",
     backgroundColor: "#fff",
-    alignItems: "center",
-    paddingBottom: Platform.OS === "ios" ? 20 : 8,
+    alignItems: "flex-end", // Alinha ao fundo para inputs multiline
+    paddingBottom: Platform.OS === "ios" ? 25 : 8,
   },
-  input: {
+  textInput: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 25,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 20,
     paddingHorizontal: 15,
-    paddingVertical: Platform.OS === "ios" ? 10 : 8,
-    backgroundColor: "#f9f9f9",
+    paddingVertical: 10,
+    paddingTop: 10, // Padding superior para iOS
     marginRight: 8,
     fontSize: 16,
+    maxHeight: 120, // Limita o crescimento do input
   },
   sendButton: {
-    backgroundColor: "#9C6ADE", // Cor roxa do seu app
-    width: 45,
-    height: 45,
-    borderRadius: 25,
+    backgroundColor: "#003249",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: "center",
     alignItems: "center",
+  },
+  buttonDisabled: {
+    backgroundColor: "#a9a9a9",
   },
   messageBubble: {
     maxWidth: "80%",
     marginVertical: 5,
-    padding: 12,
-    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
   },
   userBubble: {
-    backgroundColor: "#f1f0f0",
+    backgroundColor: "#E5E5EA", // Cinza claro padrão
     alignSelf: "flex-end",
-    borderTopRightRadius: 4,
+    borderTopRightRadius: 5,
   },
   botBubble: {
-    backgroundColor: "#9C6ADE", // Cor roxa do seu app
+    backgroundColor: "#003249", // Azul principal
     alignSelf: "flex-start",
-    borderTopLeftRadius: 4,
+    borderTopLeftRadius: 5,
   },
-  userText: { color: "#333", fontSize: 16 },
-  botText: { color: "#fff", fontSize: 16 },
+  userText: {
+    color: "#000",
+    fontSize: 16,
+  },
+  typingIndicator: {
+    width: 60,
+    alignItems: "center",
+  },
 });
