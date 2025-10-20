@@ -11,13 +11,12 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import CustomInput from "../../components/CustomInput";
 import { UserContext, UserContextType } from "../../contexts/UserContext";
 
-// NOVO: Componente para validar a força da senha em tempo real
 const PasswordStrengthIndicator = ({ password }: { password: string }) => {
   const hasMinLength = password.length >= 6;
   const hasUpperCase = /[A-Z]/.test(password);
@@ -89,7 +88,6 @@ export default function RegisterScreen() {
     setIsLoading(true);
     try {
       await context.register(fullName, email, password, imageUri);
-      // O redirecionamento é tratado pelo _layout
     } catch (error: any) {
       if (error.code === "auth/email-already-in-use") {
         setErrorMessage("Este e-mail já está sendo utilizado.");
@@ -145,91 +143,42 @@ export default function RegisterScreen() {
             </View>
           </TouchableOpacity>
 
-          {/* Inputs */}
-          <View style={styles.inputContainer}>
-            <Ionicons
-              name="person-outline"
-              size={22}
-              color="#888"
-              style={styles.inputIcon}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Nome Completo"
-              value={fullName}
-              onChangeText={setFullName}
-            />
-          </View>
-          <View style={styles.inputContainer}>
-            <Ionicons
-              name="mail-outline"
-              size={22}
-              color="#888"
-              style={styles.inputIcon}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="E-mail"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-          </View>
-          <View style={styles.inputContainer}>
-            <Ionicons
-              name="lock-closed-outline"
-              size={22}
-              color="#888"
-              style={styles.inputIcon}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Crie uma senha"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!isPasswordVisible}
-            />
-            <TouchableOpacity
-              onPress={() => setIsPasswordVisible(!isPasswordVisible)}
-              style={styles.eyeIcon}
-            >
-              <Ionicons
-                name={isPasswordVisible ? "eye-off-outline" : "eye-outline"}
-                size={22}
-                color="#888"
-              />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.inputContainer}>
-            <Ionicons
-              name="lock-closed-outline"
-              size={22}
-              color="#888"
-              style={styles.inputIcon}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Confirme sua senha"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry={!isConfirmPasswordVisible}
-            />
-            <TouchableOpacity
-              onPress={() =>
-                setIsConfirmPasswordVisible(!isConfirmPasswordVisible)
-              }
-              style={styles.eyeIcon}
-            >
-              <Ionicons
-                name={
-                  isConfirmPasswordVisible ? "eye-off-outline" : "eye-outline"
-                }
-                size={22}
-                color="#888"
-              />
-            </TouchableOpacity>
-          </View>
+          {/* Inputs Atualizados */}
+          <CustomInput
+            icon="person-outline"
+            placeholder="Nome Completo"
+            value={fullName}
+            onChangeText={setFullName}
+            autoCapitalize="words"
+          />
+          <CustomInput
+            icon="mail-outline"
+            placeholder="E-mail"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+          <CustomInput
+            icon="lock-closed-outline"
+            placeholder="Crie uma senha"
+            value={password}
+            onChangeText={setPassword}
+            isPassword={true}
+            secureTextEntry={!isPasswordVisible}
+            onToggleVisibility={() => setIsPasswordVisible(!isPasswordVisible)}
+          />
+          <CustomInput
+            icon="lock-closed-outline"
+            placeholder="Confirme sua senha"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            isPassword={true}
+            secureTextEntry={!isConfirmPasswordVisible}
+            onToggleVisibility={() =>
+              setIsConfirmPasswordVisible(!isConfirmPasswordVisible)
+            }
+          />
 
           {password.length > 0 && (
             <PasswordStrengthIndicator password={password} />
@@ -275,11 +224,16 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     justifyContent: "center",
   },
-  backButton: { position: "absolute", top: 20, left: 20, padding: 5 },
+  backButton: {
+    position: "absolute",
+    top: 20,
+    left: 20,
+    zIndex: 10,
+    padding: 5,
+  },
   headerContainer: { alignItems: "center", marginBottom: 20, marginTop: 60 },
   title: { fontSize: 28, fontWeight: "bold", color: "#333" },
   subtitle: { fontSize: 16, color: "#888", marginTop: 8, textAlign: "center" },
-
   imagePickerContainer: {
     alignSelf: "center",
     marginBottom: 20,
@@ -306,23 +260,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#fff",
   },
-
-  inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    marginBottom: 15,
-    shadowColor: "#9E9E9E",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  inputIcon: { paddingHorizontal: 15 },
-  input: { flex: 1, paddingVertical: 18, fontSize: 16, color: "#333" },
-  eyeIcon: { paddingHorizontal: 15 },
-
   passwordRequirementsContainer: {
     marginBottom: 10,
     paddingHorizontal: 10,
@@ -336,7 +273,6 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 13,
   },
-
   errorText: {
     color: "#FF6B6B",
     fontSize: 14,
@@ -346,7 +282,6 @@ const styles = StyleSheet.create({
     height: 20,
   },
   errorSpacer: { height: 20, marginBottom: 10 },
-
   mainButton: {
     backgroundColor: "#003249",
     padding: 18,
@@ -354,7 +289,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   mainButtonText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
-
   footerContainer: {
     flexDirection: "row",
     marginTop: 30,

@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { initializeAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
@@ -13,10 +13,12 @@ const firebaseConfig = {
   measurementId: "G-53Z7V9C97K",
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Exporta os serviços que vamos usar no resto do aplicativo
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-export const storage = getStorage(app);
+const auth = initializeAuth(app);
+
+const db = getFirestore(app);
+
+const storage = getStorage(app, "gs://tcc-safeher.firebasestorage.app");
+
+export { app, auth, db, storage };

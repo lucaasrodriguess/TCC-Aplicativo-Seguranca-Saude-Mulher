@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import React, { useContext, useState } from "react";
 import {
   ActivityIndicator,
@@ -14,12 +13,12 @@ import {
   StatusBar,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+// 👈 NOVO: Importa o componente de input padronizado
+import CustomInput from "../../components/CustomInput";
 import { UserContext, UserContextType } from "../../contexts/UserContext";
-import { storage } from "../../services/firebaseConfig";
 
 // --- COMPONENTE DE CABEÇALHO ---
 const Header = () => {
@@ -81,14 +80,6 @@ export default function EditProfileScreen() {
     }
   };
 
-  const uploadImage = async (uri: string): Promise<string> => {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    const storageRef = ref(storage, `profile_pictures/${user.uid}`);
-    await uploadBytes(storageRef, blob);
-    return await getDownloadURL(storageRef);
-  };
-
   const formatPhone = (text: string) => {
     const digits = text.replace(/\D/g, "");
     if (digits.length <= 2) return `(${digits}`;
@@ -100,19 +91,29 @@ export default function EditProfileScreen() {
   };
 
   const handleSaveChanges = async () => {
-    if (!name.trim() || !phone.trim()) {
-      Alert.alert("Campos Vazios", "Por favor, preencha seu nome e telefone.");
+    if (!name.trim()) {
+      Alert.alert("Campo Vazio", "Por favor, preencha seu nome.");
       return;
     }
     setIsLoading(true);
     try {
-      let finalAvatarUrl = user.avatar;
-      // Verifica se o avatar foi alterado (se é um URI local)
+      // Cria um objeto apenas com os dados que serão enviados para a função updateUser
+      const updatedData: Partial<{
+        name: string;
+        phone: string;
+        avatar: string;
+      }> = {
+        name,
+        phone,
+      };
+
+      // Adiciona o avatar ao objeto apenas se ele foi realmente alterado
       if (avatarUri !== user.avatar) {
-        finalAvatarUrl = await uploadImage(avatarUri);
+        updatedData.avatar = avatarUri;
       }
 
-      await updateUser({ name, phone, avatar: finalAvatarUrl });
+      await updateUser(updatedData);
+
       Alert.alert("Sucesso!", "Seu perfil foi atualizado.");
       router.back();
     } catch (error) {
@@ -146,37 +147,20 @@ export default function EditProfileScreen() {
           </View>
 
           <View style={styles.form}>
-            <View style={styles.inputContainer}>
-              <Ionicons
-                name="person-outline"
-                size={22}
-                color="#888"
-                style={styles.inputIcon}
-              />
-              <TextInput
-                value={name}
-                onChangeText={setName}
-                style={styles.input}
-                placeholder="Nome Completo"
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Ionicons
-                name="call-outline"
-                size={22}
-                color="#888"
-                style={styles.inputIcon}
-              />
-              <TextInput
-                value={phone}
-                onChangeText={(text) => setPhone(formatPhone(text))}
-                style={styles.input}
-                keyboardType="phone-pad"
-                maxLength={15}
-                placeholder="(99) 99999-9999"
-              />
-            </View>
+            {/* 👇 INPUTS ATUALIZADOS */}
+            <CustomInput
+              icon="person-outline"
+              placeholder="Nome Completo"
+              value={name}
+              onChangeText={setName}
+            />
+            <CustomInput
+              icon="call-outline"
+              placeholder="(99) 99999-9999"
+              value={phone}
+              onChangeText={(text) => setPhone(formatPhone(text))}
+              keyboardType="phone-pad"
+            />
 
             <View
               style={[styles.inputContainer, styles.inputDisabledContainer]}
@@ -187,11 +171,9 @@ export default function EditProfileScreen() {
                 color="#888"
                 style={styles.inputIcon}
               />
-              <TextInput
-                value={user.email}
-                style={[styles.input, styles.inputDisabled]}
-                editable={false}
-              />
+              <Text style={[styles.input, styles.inputDisabled]}>
+                {user.email}
+              </Text>
             </View>
           </View>
 

@@ -1,36 +1,58 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
-import React, { useContext, useState } from "react";
+import { useRouter } from "expo-router";
+import React, { useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import { UserContext, UserContextType } from "../../../contexts/UserContext";
-
-type Contact = { id: string; name: string; phone: string };
+// Importa o serviço que contém a lógica de pânico
+import { triggerPanicActions } from "../../../services/panicService";
 
 export default function SecurityScreen() {
-  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [isPanicLoading, setIsPanicLoading] = useState(false);
   const router = useRouter();
-  const { user } = useContext(UserContext) as UserContextType;
 
-  useFocusEffect(
-    React.useCallback(() => {
-      if (user) {
-        loadContacts();
-      }
-    }, [user])
-  );
-
-  const loadContacts = async () => {
-    // ... (sua lógica loadContacts continua a mesma)
+ 
+  const handleNormalPress = () => {
+    if (isPanicLoading) return; // Impede a ação se o pânico já estiver sendo acionado
+    // CORREÇÃO: Caminho absoluto para a rota dentro do grupo (main)
+    router.push("../support-resources");
   };
 
-  const sendSOS = async () => {
-    // ... (sua lógica sendSOS continua a mesma)
+
+  const handleLongPress = () => {
+    Alert.alert(
+      "Ativar Modo Pânico?",
+      "Uma mensagem de ajuda com sua localização será enviada para seus contatos de emergência.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Confirmar",
+          style: "destructive",
+          onPress: async () => {
+            setIsPanicLoading(true);
+            const success = await triggerPanicActions(); // Chama a lógica centralizada
+            setIsPanicLoading(false);
+
+            if (success) {
+              // CORREÇÃO: Caminho absoluto para a rota dentro do grupo (main)
+              // Usa 'replace' para impedir que o usuário volte para esta tela
+              router.replace("../sos-activated");
+            } else {
+              // A função triggerPanicActions já exibe alertas de erro específicos
+              console.log(
+                "Falha ao acionar o modo pânico. Verifique os logs e as permissões."
+              );
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -69,15 +91,33 @@ export default function SecurityScreen() {
           </View>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.sosButton} onPress={sendSOS}>
-          <Ionicons name="alert-circle-outline" size={32} color="#fff" />
-          <Text style={styles.sosText}>PEDIR AJUDA (SOS)</Text>
+        {/* BOTÃO SOS ATUALIZADO com as novas funcionalidades */}
+        <TouchableOpacity
+          style={styles.sosButton}
+          onPress={handleNormalPress}
+          onLongPress={handleLongPress}
+          delayLongPress={3000} // Ativa o onLongPress após 3 segundos
+          disabled={isPanicLoading}
+          activeOpacity={0.8}
+        >
+          {isPanicLoading ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <>
+              <Ionicons name="alert-circle-outline" size={32} color="#fff" />
+              <Text style={styles.sosText}>PEDIR AJUDA (SOS)</Text>
+            </>
+          )}
         </TouchableOpacity>
+        <Text style={styles.sosInstruction}>
+          Toque para ver recursos, pressione por 3s para pânico.
+        </Text>
       </View>
     </SafeAreaView>
   );
 }
 
+// Seus estilos (styles) continuam os mesmos, com a adição do sosInstruction
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -136,7 +176,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FF6B6B", // Coral vibrante
+    backgroundColor: "#FF6B6B",
     paddingVertical: 20,
     borderRadius: 20,
     width: "100%",
@@ -148,4 +188,11 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   sosText: { fontSize: 18, fontWeight: "bold", color: "#fff", marginLeft: 12 },
+  sosInstruction: {
+    // Estilo para a nova instrução
+    textAlign: "center",
+    color: "#6c757d",
+    marginTop: 12,
+    fontSize: 12,
+  },
 });

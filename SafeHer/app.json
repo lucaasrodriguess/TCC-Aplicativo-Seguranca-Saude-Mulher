@@ -9,8 +9,15 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.vagnudoo.SafeHer",
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBk8y7dnyo6U4i2pyDS1noz_vNym3_MCfA"
+        }
+      }
     },
+
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/logo.png",

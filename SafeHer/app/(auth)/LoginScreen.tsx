@@ -22,10 +22,9 @@ export default function LoginScreen() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isPasswordVisible, setIsPasswordVisible] = useState(false); // NOVO: Estado para visibilidade da senha
-
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isButtonLoading, setIsButtonLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   const handleLogin = async () => {
@@ -34,10 +33,10 @@ export default function LoginScreen() {
       return;
     }
     setErrorMessage("");
-    setIsLoading(true);
+    setIsButtonLoading(true);
     try {
+      // --- CORREÇÃO: A chamada para o login foi simplificada ---
       await context.login(email, password);
-      // O redirecionamento é tratado pelo _layout principal
     } catch (error: any) {
       if (
         [
@@ -53,19 +52,18 @@ export default function LoginScreen() {
         console.error("Erro de Login:", error);
       }
     } finally {
-      setIsLoading(false);
+      setIsButtonLoading(false);
     }
   };
 
   const handleGoogleLogin = async () => {
-    setErrorMessage("");
     setIsGoogleLoading(true);
     try {
       await context.signInWithGoogle();
-    } catch (error: any) {
-      setErrorMessage("Ocorreu um erro ao logar com o Google.");
-      console.error("Erro de Login com Google:", error);
-    } finally {
+      // O isLoading será tratado pelo listener global
+    } catch (error) {
+      console.error("Erro no login com Google:", error);
+      setErrorMessage("Não foi possível fazer login com o Google.");
       setIsGoogleLoading(false);
     }
   };
@@ -90,7 +88,6 @@ export default function LoginScreen() {
             <Text style={styles.subtitle}>Faça login para continuar</Text>
           </View>
 
-          {/* Input de Email */}
           <View style={styles.inputContainer}>
             <Ionicons
               name="mail-outline"
@@ -110,7 +107,6 @@ export default function LoginScreen() {
             />
           </View>
 
-          {/* Input de Senha com Ícone */}
           <View style={styles.inputContainer}>
             <Ionicons
               name="lock-closed-outline"
@@ -124,7 +120,7 @@ export default function LoginScreen() {
               placeholderTextColor="#888"
               value={password}
               onChangeText={setPassword}
-              secureTextEntry={!isPasswordVisible} // ALTERADO: Controlado pelo estado
+              secureTextEntry={!isPasswordVisible}
               onFocus={() => setErrorMessage("")}
             />
             <TouchableOpacity
@@ -139,6 +135,8 @@ export default function LoginScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* --- CORREÇÃO: Checkbox removido para simplificar a UI --- */}
+
           {errorMessage ? (
             <Text style={styles.errorText}>{errorMessage}</Text>
           ) : (
@@ -148,9 +146,9 @@ export default function LoginScreen() {
           <TouchableOpacity
             style={styles.mainButton}
             onPress={handleLogin}
-            disabled={isLoading}
+            disabled={isButtonLoading}
           >
-            {isLoading ? (
+            {isButtonLoading ? (
               <ActivityIndicator color="#FFF" />
             ) : (
               <Text style={styles.mainButtonText}>Entrar</Text>
@@ -209,7 +207,6 @@ const styles = StyleSheet.create({
   logo: { width: 80, height: 80, resizeMode: "contain", marginBottom: 15 },
   title: { fontSize: 28, fontWeight: "bold", color: "#333" },
   subtitle: { fontSize: 16, color: "#888", marginTop: 8 },
-
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -223,14 +220,8 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   inputIcon: { paddingHorizontal: 15 },
-  input: {
-    flex: 1,
-    paddingVertical: 18,
-    fontSize: 16,
-    color: "#333",
-  },
+  input: { flex: 1, paddingVertical: 18, fontSize: 16, color: "#333" },
   eyeIcon: { paddingHorizontal: 15 },
-
   errorText: {
     color: "#FF6B6B",
     fontSize: 14,
@@ -240,7 +231,6 @@ const styles = StyleSheet.create({
     height: 20,
   },
   errorSpacer: { height: 20, marginBottom: 10 },
-
   mainButton: {
     backgroundColor: "#003249",
     padding: 18,
@@ -249,7 +239,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   mainButtonText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
-
   separatorContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -258,7 +247,6 @@ const styles = StyleSheet.create({
   },
   line: { flex: 1, height: 1, backgroundColor: "#e0e0e0" },
   separatorText: { marginHorizontal: 10, color: "#888" },
-
   secondaryButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -273,7 +261,6 @@ const styles = StyleSheet.create({
   },
   googleLogo: { width: 22, height: 22, marginRight: 12 },
   secondaryButtonText: { color: "#333", fontWeight: "bold", fontSize: 16 },
-
   footerContainer: {
     flexDirection: "row",
     marginTop: 30,
