@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Verificar E-mail - SafeHer</title>
+    <style>
+      /* --- MESMO DESIGN DO RESET.HTML --- */
+      :root {
+        --primary-color: #003366; /* Azul Marinho */
+        --bg-color: #f8f9fa;
+        --text-color: #333333;
+        --success-color: #27ae60;
+        --error-color: #c0392b;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        margin: 0;
+        padding: 20px;
+      }
+
+      .card {
+        background: white;
+        padding: 2.5rem;
+        border-radius: 15px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        width: 100%;
+        max-width: 400px;
+        text-align: center;
+      }
+
+      h2 {
+        font-size: 1.5rem;
+        color: var(--primary-color);
+        margin-bottom: 1rem;
+        font-weight: bold;
+      }
+
+      p {
+        color: #666;
+        margin-bottom: 2rem;
+        line-height: 1.5;
+      }
+
+      /* Animação de Loading (Spinner) */
+      .loader {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid var(--primary-color);
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 20px auto;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* Ícones de Status */
+      .icon {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+        display: block;
+      }
+      .success-icon {
+        color: var(--success-color);
+      }
+      .error-icon {
+        color: var(--error-color);
+      }
+
+      /* Botão para fechar ou voltar (Opcional) */
+      .btn {
+        display: inline-block;
+        width: 100%;
+        padding: 15px;
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 1rem;
+        font-weight: bold;
+        text-decoration: none;
+        box-sizing: border-box;
+        cursor: pointer;
+      }
+      .btn:hover {
+        opacity: 0.9;
+      }
+
+      .hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div id="loading-state">
+        <div class="loader"></div>
+        <h2>Verificando...</h2>
+        <p>Aguarde enquanto validamos seu e-mail.</p>
+      </div>
+
+      <div id="success-state" class="hidden">
+        <span class="icon success-icon">✔</span>
+        <h2>E-mail Verificado!</h2>
+        <p>
+          Sua conta SafeHer foi ativada com sucesso. Você já pode voltar ao
+          aplicativo e fazer login.
+        </p>
+      </div>
+
+      <div id="error-state" class="hidden">
+        <span class="icon error-icon">✖</span>
+        <h2>Ops, algo deu errado.</h2>
+        <p id="error-msg">O link é inválido ou expirou.</p>
+      </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+
+    <script>
+      // --- CONFIGURAÇÃO ---
+      const firebaseConfig = {
+        apiKey: "AIzaSyDI-amhlWRiOOIkcP79pwCwLriqfiL8e1Q",
+        authDomain: "tcc-safeher.firebaseapp.com",
+        projectId: "tcc-safeher",
+        storageBucket: "tcc-safeher.firebasestorage.app",
+        messagingSenderId: "1050394973274",
+        appId: "1:1050394973274:web:1aa115c77689c39a53f463",
+        measurementId: "G-53Z7V9C97K",
+      };
+
+      firebase.initializeApp(firebaseConfig);
+      const auth = firebase.auth();
+
+      // --- LÓGICA DE VERIFICAÇÃO ---
+      const urlParams = new URLSearchParams(window.location.search);
+      const mode = urlParams.get("mode");
+      const oobCode = urlParams.get("oobCode");
+
+      const loadingDiv = document.getElementById("loading-state");
+      const successDiv = document.getElementById("success-state");
+      const errorDiv = document.getElementById("error-state");
+      const errorMsg = document.getElementById("error-msg");
+
+      // Função para trocar de tela
+      function showState(state) {
+        loadingDiv.classList.add("hidden");
+        successDiv.classList.add("hidden");
+        errorDiv.classList.add("hidden");
+
+        if (state === "success") successDiv.classList.remove("hidden");
+        if (state === "error") errorDiv.classList.remove("hidden");
+      }
+
+      if (mode === "verifyEmail" && oobCode) {
+        // Executa a verificação no Firebase
+        auth
+          .applyActionCode(oobCode)
+          .then(() => {
+            // Sucesso!
+            showState("success");
+          })
+          .catch((error) => {
+            // Erro (código expirado, inválido, etc)
+            console.error(error);
+            errorMsg.innerText = "Este link já foi usado ou expirou.";
+            showState("error");
+          });
+      } else {
+        // Link acessado sem parâmetros
+        errorMsg.innerText = "Parâmetros inválidos na URL.";
+        showState("error");
+      }
+    </script>
+  </body>
+</html>

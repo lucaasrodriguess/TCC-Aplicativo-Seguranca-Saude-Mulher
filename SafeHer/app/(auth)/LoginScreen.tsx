@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import React, { useContext, useState } from "react";
 import {
   ActivityIndicator,
+  Modal, // Importado
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -16,6 +17,49 @@ import {
 } from "react-native";
 import { UserContext, UserContextType } from "../../contexts/UserContext";
 
+// Importe o 'auth' do seu arquivo de configuração do Firebase
+import { sendPasswordResetEmail } from "firebase/auth";
+import { auth } from "../../services/firebaseConfig";
+
+// --- NOVO MODAL GENÉRICO ---
+const InfoModal = ({
+  visible,
+  onClose,
+  title,
+  message,
+  buttonText,
+  icon,
+  iconColor,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  title: string;
+  message: string;
+  buttonText: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  iconColor: string;
+}) => (
+  <Modal
+    animationType="fade"
+    transparent={true}
+    visible={visible}
+    onRequestClose={onClose}
+  >
+    <View style={modalStyles.centeredView}>
+      <View style={modalStyles.modalView}>
+        <View style={modalStyles.iconContainer}>
+          <Ionicons name={icon} size={50} color={iconColor} />
+        </View>
+        <Text style={modalStyles.modalTitle}>{title}</Text>
+        <Text style={modalStyles.modalText}>{message}</Text>
+        <TouchableOpacity style={modalStyles.modalButton} onPress={onClose}>
+          <Text style={modalStyles.modalButtonText}>{buttonText}</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  </Modal>
+);
+
 export default function LoginScreen() {
   const context = useContext(UserContext) as UserContextType;
   const router = useRouter();
@@ -27,6 +71,11 @@ export default function LoginScreen() {
   const [isButtonLoading, setIsButtonLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
+  // --- NOVOS ESTADOS DOS MODAIS ---
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [showNotVerifiedModal, setShowNotVerifiedModal] = useState(false);
+
+  // --- FUNÇÃO DE LOGIN ATUALIZADA ---
   const handleLogin = async () => {
     if (email.trim() === "" || password.trim() === "") {
       setErrorMessage("Por favor, preencha o e-mail e a senha.");
@@ -35,10 +84,13 @@ export default function LoginScreen() {
     setErrorMessage("");
     setIsButtonLoading(true);
     try {
-      // --- CORREÇÃO: A chamada para o login foi simplificada ---
       await context.login(email, password);
+      // Sucesso: O listener onAuthStateChanged cuidará da navegação
     } catch (error: any) {
-      if (
+      if (error.message === "auth/email-not-verified") {
+        // Mostra o modal de e-mail não verificado
+        setShowNotVerifiedModal(true);
+      } else if (
         [
           "auth/user-not-found",
           "auth/wrong-password",
@@ -57,10 +109,10 @@ export default function LoginScreen() {
   };
 
   const handleGoogleLogin = async () => {
+    // ... (Sem alterações)
     setIsGoogleLoading(true);
     try {
       await context.signInWithGoogle();
-      // O isLoading será tratado pelo listener global
     } catch (error) {
       console.error("Erro no login com Google:", error);
       setErrorMessage("Não foi possível fazer login com o Google.");
@@ -68,8 +120,52 @@ export default function LoginScreen() {
     }
   };
 
+  // --- FUNÇÃO DE RESET ATUALIZADA ---
+  const handlePasswordReset = async () => {
+    if (email.trim() === "") {
+      setErrorMessage("Digite seu e-mail no campo acima para redefinir a senha.");
+      return;
+    }
+    setErrorMessage("");
+    setIsButtonLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      // Mostra o modal de sucesso
+      setShowResetModal(true);
+    } catch (error: any) {
+      if (error.code === "auth/user-not-found") {
+        setErrorMessage("Nenhum usuário encontrado com este e-mail.");
+      } else {
+        setErrorMessage("Erro ao enviar e-mail de redefinição.");
+      }
+      console.error("Erro reset senha:", error);
+    } finally {
+      setIsButtonLoading(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
+      {/* --- RENDERIZA OS MODAIS --- */}
+      <InfoModal
+        visible={showResetModal}
+        onClose={() => setShowResetModal(false)}
+        title="Verifique seu E-mail"
+        message="Enviamos um link para redefinição de senha para o seu e-mail."
+        buttonText="OK"
+        icon="mail"
+        iconColor="#007AFF" // Azul
+      />
+      <InfoModal
+        visible={showNotVerifiedModal}
+        onClose={() => setShowNotVerifiedModal(false)}
+        title="E-mail Não Verificado"
+        message="Sua conta foi criada, mas seu e-mail ainda não foi verificado. Por favor, cheque sua caixa de entrada."
+        buttonText="Entendi"
+        icon="alert-circle"
+        iconColor="#FF9500" // Laranja
+      />
+
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -79,6 +175,8 @@ export default function LoginScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          {/* ... Restante do seu JSX ... */}
+          {/* (headerContainer, inputs, botões...) */}
           <View style={styles.headerContainer}>
             <Image
               source={require("@/assets/images/logo.png")}
@@ -87,7 +185,6 @@ export default function LoginScreen() {
             <Text style={styles.title}>Bem-vinda de volta!</Text>
             <Text style={styles.subtitle}>Faça login para continuar</Text>
           </View>
-
           <View style={styles.inputContainer}>
             <Ionicons
               name="mail-outline"
@@ -106,7 +203,6 @@ export default function LoginScreen() {
               onFocus={() => setErrorMessage("")}
             />
           </View>
-
           <View style={styles.inputContainer}>
             <Ionicons
               name="lock-closed-outline"
@@ -134,15 +230,18 @@ export default function LoginScreen() {
               />
             </TouchableOpacity>
           </View>
-
-          {/* --- CORREÇÃO: Checkbox removido para simplificar a UI --- */}
-
+          <TouchableOpacity
+            style={styles.forgotPasswordButton}
+            onPress={handlePasswordReset}
+            disabled={isButtonLoading}
+          >
+            <Text style={styles.forgotPasswordText}>Esqueceu a senha?</Text>
+          </TouchableOpacity>
           {errorMessage ? (
             <Text style={styles.errorText}>{errorMessage}</Text>
           ) : (
             <View style={styles.errorSpacer} />
           )}
-
           <TouchableOpacity
             style={styles.mainButton}
             onPress={handleLogin}
@@ -154,13 +253,11 @@ export default function LoginScreen() {
               <Text style={styles.mainButtonText}>Entrar</Text>
             )}
           </TouchableOpacity>
-
           <View style={styles.separatorContainer}>
             <View style={styles.line} />
             <Text style={styles.separatorText}>ou</Text>
             <View style={styles.line} />
           </View>
-
           <TouchableOpacity
             style={styles.secondaryButton}
             onPress={handleGoogleLogin}
@@ -180,7 +277,6 @@ export default function LoginScreen() {
               </>
             )}
           </TouchableOpacity>
-
           <View style={styles.footerContainer}>
             <Text style={styles.footerText}>Não tem uma conta? </Text>
             <TouchableOpacity
@@ -195,6 +291,7 @@ export default function LoginScreen() {
   );
 }
 
+// Estilos da Tela (sem alterações)
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FAF9F6" },
   content: {
@@ -222,15 +319,24 @@ const styles = StyleSheet.create({
   inputIcon: { paddingHorizontal: 15 },
   input: { flex: 1, paddingVertical: 18, fontSize: 16, color: "#333" },
   eyeIcon: { paddingHorizontal: 15 },
+  forgotPasswordButton: {
+    alignSelf: "flex-end",
+  },
+  forgotPasswordText: {
+    color: "#003249",
+    fontSize: 14,
+    fontWeight: "600",
+  },
   errorText: {
     color: "#FF6B6B",
     fontSize: 14,
     fontWeight: "600",
     textAlign: "center",
     marginBottom: 10,
+    marginTop: 10,
     height: 20,
   },
-  errorSpacer: { height: 20, marginBottom: 10 },
+  errorSpacer: { height: 20, marginBottom: 10, marginTop: 10 },
   mainButton: {
     backgroundColor: "#003249",
     padding: 18,
@@ -269,4 +375,61 @@ const styles = StyleSheet.create({
   },
   footerText: { fontSize: 14, color: "#555" },
   linkText: { color: "#FF6B6B", fontWeight: "bold", fontSize: 14 },
+});
+
+// --- ESTILOS DO MODAL (compartilhado com o de cima) ---
+const modalStyles = StyleSheet.create({
+  centeredView: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+  },
+  modalView: {
+    margin: 20,
+    backgroundColor: "white",
+    borderRadius: 20,
+    padding: 25,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    width: "90%",
+  },
+  iconContainer: {
+    marginBottom: 15,
+  },
+  modalTitle: {
+    marginBottom: 10,
+    textAlign: "center",
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  modalText: {
+    marginBottom: 20,
+    textAlign: "center",
+    fontSize: 15,
+    color: "#555",
+    lineHeight: 22,
+  },
+  modalButton: {
+    backgroundColor: "#003249",
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 30,
+    elevation: 2,
+    width: "100%",
+  },
+  modalButtonText: {
+    color: "white",
+    fontWeight: "bold",
+    textAlign: "center",
+    fontSize: 16,
+  },
 });

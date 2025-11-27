@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import React, { useContext, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
+  Modal, // Importado
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
@@ -13,10 +13,12 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Image,
 } from "react-native";
 import CustomInput from "../../components/CustomInput";
 import { UserContext, UserContextType } from "../../contexts/UserContext";
 
+// Componente PasswordStrengthIndicator (Sem alterações)
 const PasswordStrengthIndicator = ({ password }: { password: string }) => {
   const hasMinLength = password.length >= 6;
   const hasUpperCase = /[A-Z]/.test(password);
@@ -46,6 +48,35 @@ const PasswordStrengthIndicator = ({ password }: { password: string }) => {
   );
 };
 
+// --- NOVO MODAL BONITO ---
+const SuccessModal = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => (
+  <Modal
+    animationType="fade"
+    transparent={true}
+    visible={visible}
+    onRequestClose={onClose}
+  >
+    <View style={modalStyles.centeredView}>
+      <View style={modalStyles.modalView}>
+        <View style={modalStyles.iconContainer}>
+          <Ionicons name="checkmark-circle" size={50} color="#10B981" />
+        </View>
+        <Text style={modalStyles.modalTitle}>Conta Criada!</Text>
+        <Text style={modalStyles.modalText}>
+          Enviamos um link de verificação para o seu e-mail. Por favor,
+          verifique sua caixa de entrada para ativar sua conta.
+        </Text>
+        <TouchableOpacity
+          style={modalStyles.modalButton}
+          onPress={onClose}
+        >
+          <Text style={modalStyles.modalButtonText}>OK, ir para Login</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  </Modal>
+);
+
 export default function RegisterScreen() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -59,10 +90,14 @@ export default function RegisterScreen() {
 
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  
+  // --- NOVO ESTADO DO MODAL ---
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const router = useRouter();
   const context = useContext(UserContext) as UserContextType;
 
+  // handlePickImage (Sem alterações)
   const handlePickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -75,6 +110,7 @@ export default function RegisterScreen() {
     }
   };
 
+  // --- FUNÇÃO DE REGISTRO ATUALIZADA ---
   const handleRegister = async () => {
     if (!fullName || !email || !password) {
       setErrorMessage("Por favor, preencha todos os campos.");
@@ -85,10 +121,19 @@ export default function RegisterScreen() {
       return;
     }
     setErrorMessage("");
-    setIsLoading(true);
+    setIsLoading(true); // 1. Mostra o "Carregando"
     try {
+      // 2. Chama o registro (que cria, envia e-mail e desloga)
       await context.register(fullName, email, password, imageUri);
+      
+      // 3. Sucesso! Para de carregar
+      setIsLoading(false); 
+      
+      // 4. Mostra o Modal Bonito
+      setShowSuccessModal(true);
+
     } catch (error: any) {
+      setIsLoading(false); // Para de carregar em caso de erro
       if (error.code === "auth/email-already-in-use") {
         setErrorMessage("Este e-mail já está sendo utilizado.");
       } else if (error.code === "auth/weak-password") {
@@ -97,13 +142,22 @@ export default function RegisterScreen() {
         setErrorMessage("Ocorreu um erro ao criar a conta.");
         console.error(error);
       }
-    } finally {
-      setIsLoading(false);
     }
+    // O finally foi removido para termos controle do isLoading
+  };
+  
+  // --- NOVA FUNÇÃO PARA FECHAR O MODAL ---
+  const handleModalClose = () => {
+    setShowSuccessModal(false);
+    // 5. Navega para o login APÓS o usuário ver a mensagem
+    router.replace("/(auth)/LoginScreen");
   };
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* --- RENDERIZA O MODAL --- */}
+      <SuccessModal visible={showSuccessModal} onClose={handleModalClose} />
+      
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -120,13 +174,14 @@ export default function RegisterScreen() {
             <Ionicons name="chevron-back" size={28} color="#333" />
           </TouchableOpacity>
 
+          {/* ... Restante do seu JSX ... */}
+          {/* (headerContainer, imagePickerContainer, inputs...) */}
           <View style={styles.headerContainer}>
             <Text style={styles.title}>Crie sua Conta</Text>
             <Text style={styles.subtitle}>
               Junte-se à nossa comunidade de apoio
             </Text>
           </View>
-
           <TouchableOpacity
             style={styles.imagePickerContainer}
             onPress={handlePickImage}
@@ -142,8 +197,6 @@ export default function RegisterScreen() {
               <Ionicons name="add" size={18} color="#fff" />
             </View>
           </TouchableOpacity>
-
-          {/* Inputs Atualizados */}
           <CustomInput
             icon="person-outline"
             placeholder="Nome Completo"
@@ -179,7 +232,6 @@ export default function RegisterScreen() {
               setIsConfirmPasswordVisible(!isConfirmPasswordVisible)
             }
           />
-
           {password.length > 0 && (
             <PasswordStrengthIndicator password={password} />
           )}
@@ -189,7 +241,7 @@ export default function RegisterScreen() {
           ) : (
             <View style={styles.errorSpacer} />
           )}
-
+          
           <TouchableOpacity
             style={styles.mainButton}
             onPress={handleRegister}
@@ -201,7 +253,6 @@ export default function RegisterScreen() {
               <Text style={styles.mainButtonText}>Criar Conta</Text>
             )}
           </TouchableOpacity>
-
           <View style={styles.footerContainer}>
             <Text style={styles.footerText}>Já tem uma conta? </Text>
             <TouchableOpacity
@@ -216,6 +267,7 @@ export default function RegisterScreen() {
   );
 }
 
+// Estilos da Tela (sem alterações)
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FAF9F6" },
   content: {
@@ -297,4 +349,61 @@ const styles = StyleSheet.create({
   },
   footerText: { fontSize: 14, color: "#555" },
   linkText: { color: "#FF6B6B", fontWeight: "bold", fontSize: 14 },
+});
+
+// --- ESTILOS DO NOVO MODAL ---
+const modalStyles = StyleSheet.create({
+  centeredView: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+  },
+  modalView: {
+    margin: 20,
+    backgroundColor: "white",
+    borderRadius: 20,
+    padding: 25,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    width: "90%",
+  },
+  iconContainer: {
+    marginBottom: 15,
+  },
+  modalTitle: {
+    marginBottom: 10,
+    textAlign: "center",
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  modalText: {
+    marginBottom: 20,
+    textAlign: "center",
+    fontSize: 15,
+    color: "#555",
+    lineHeight: 22,
+  },
+  modalButton: {
+    backgroundColor: "#003249",
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 30,
+    elevation: 2,
+    width: "100%",
+  },
+  modalButtonText: {
+    color: "white",
+    fontWeight: "bold",
+    textAlign: "center",
+    fontSize: 16,
+  },
 });

@@ -15,7 +15,7 @@ import AnimatedRegion from "react-native-maps/lib/AnimatedRegion";
 import { io } from "socket.io-client";
 import { UserContext, UserContextType } from "../../contexts/UserContext";
 
-const SERVER_URL = "https://wilful-emlyn-safeher-41c63af9.koyeb.app";
+const SERVER_URL = "https://rural-maggie-safeher-8d4df040.koyeb.app";
 
 export default function MyLocation() {
   const { user } = useContext(UserContext) as UserContextType;
