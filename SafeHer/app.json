@@ -2,6 +2,12 @@
   "expo": {
     "name": "SafeHer",
     "slug": "SafeHer",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/logo.png",
+    "scheme": "safeher",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/logo.png",
@@ -10,22 +16,34 @@
       "edgeToEdgeEnabled": true,
       "package": "com.vagnudoo.SafeHer",
       "googleServicesFile": "./google-services.json",
-
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyBk8y7dnyo6U4i2pyDS1noz_vNym3_MCfA"
         }
-      }
+      },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "tcc-safeher.firebaseapp.com"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
     },
-
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/images/logo.png",
-    "scheme": "safeher",
-    "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.vagnudoo.SafeHer",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "web": {
       "bundler": "metro",

@@ -5,32 +5,41 @@ import { MenuProvider } from "react-native-popup-menu";
 import { UserContext, UserProvider } from "../contexts/UserContext";
 
 function GatekeeperLayout() {
+  // ATENÇÃO: É preciso importar o tipo AppUser para usar o user.emailVerified
   const { user, isLoading } = useContext(UserContext);
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
-    // 1. Não faça nada enquanto o UserContext estiver na verificação inicial.
     if (isLoading) {
       return;
     }
 
     const inAuthGroup = segments[0] === "(auth)";
 
-    // 2. Se o usuário ESTÁ logado e está tentando acessar uma tela de auth...
-    if (user && inAuthGroup) {
-      // ...redirecione-o para a tela principal.
-      // Usamos o caminho para o layout das tabs.
+    // --- LÓGICA ATUALIZADA E CORRIGIDA ---
+
+    // Define se um usuário está realmente autorizado a entrar no app.
+    // Ele precisa existir E ter o e-mail verificado.
+    // Usuários do Google já vêm com 'emailVerified: true'.
+    const isUserAuthorized = user && user.emailVerified;
+
+    // 1. Se o usuário ESTÁ AUTORIZADO, mas está numa tela de autenticação (Login/Registro)...
+    if (isUserAuthorized && inAuthGroup) {
+      // ...mande ele para a tela principal do app.
       router.replace("/(main)/(tabs)");
     }
-    // 3. Se o usuário NÃO ESTÁ logado e NÃO está em uma tela de auth...
-    else if (!user && !inAuthGroup) {
-      // ...force-o a ir para o Login.
+    // 2. Se o usuário NÃO ESTÁ AUTORIZADO, mas está tentando acessar uma tela protegida...
+    else if (!isUserAuthorized && !inAuthGroup) {
+      // ...mande ele de volta para o Login.
       router.replace("/(auth)/LoginScreen");
     }
-  }, [user, isLoading, segments, router]); // Dependências corretas
 
-  // Mostra um loading full-screen para evitar que a tela de login "pisque" rapidamente
+    // Se nenhuma das condições acima for atendida, o usuário está onde deveria estar
+    // (ex: não logado na tela de login, ou logado e verificado na tela principal).
+    // Então não fazemos nada.
+  }, [user, isLoading, segments, router]);
+
   if (isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
@@ -39,7 +48,6 @@ function GatekeeperLayout() {
     );
   }
 
-  // Renderiza a rota atual (seja do grupo 'auth' ou 'main')
   return <Slot />;
 }
 

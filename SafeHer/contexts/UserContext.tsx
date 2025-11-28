@@ -4,6 +4,7 @@ import * as WebBrowser from "expo-web-browser";
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  sendEmailVerification,
   signInWithEmailAndPassword,
   signOut,
   updateProfile,
@@ -15,12 +16,14 @@ import { auth, db, storage } from "../services/firebaseConfig";
 
 WebBrowser.maybeCompleteAuthSession();
 
+// --- TIPO ATUALIZADO ---
 export type AppUser = {
   uid: string;
   name: string;
   email: string;
   phone: string;
   avatar: string;
+  emailVerified: boolean; // <-- ADICIONADO
 };
 
 export type UserContextType = {
@@ -49,6 +52,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<AppUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // ... (Google Auth Request sem alterações) ...
   const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
     androidClientId:
       "[804183132983-ccigi07v47laa8tap010qqibol7c76m7.apps.googleusercontent.com](http://804183132983-ccigi07v47laa8tap010qqibol7c76m7.apps.googleusercontent.com/)",
@@ -62,14 +66,21 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         if (firebaseUser) {
           const userDocRef = doc(db, "users", firebaseUser.uid);
           const userDoc = await getDoc(userDocRef);
+
           if (userDoc.exists()) {
-            setUser({ uid: firebaseUser.uid, ...userDoc.data() } as AppUser);
+            // --- ATUALIZADO: Passa o emailVerified para o nosso objeto User ---
+            setUser({
+              uid: firebaseUser.uid,
+              ...userDoc.data(),
+              emailVerified: firebaseUser.emailVerified, // <-- ADICIONADO
+            } as AppUser);
           } else {
             const newUserProfile = {
               name: firebaseUser.displayName || "Usuário",
               email: firebaseUser.email || "",
               phone: firebaseUser.phoneNumber || "",
               avatar: firebaseUser.photoURL || DEFAULT_AVATAR_URL,
+              emailVerified: firebaseUser.emailVerified, // <-- ADICIONADO
             };
             await setDoc(userDocRef, newUserProfile);
             setUser({ uid: firebaseUser.uid, ...newUserProfile });
@@ -79,6 +90,7 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
         }
       } catch (error) {
         console.error("Erro no listener de autenticação:", error);
+        setUser(null);
       } finally {
         setIsLoading(false);
       }
@@ -87,12 +99,21 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const login = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password);
+    const userCredential = await signInWithEmailAndPassword(
+      auth,
+      email,
+      password
+    );
+    if (!userCredential.user.emailVerified) {
+      await signOut(auth);
+      throw new Error("auth/email-not-verified");
+    }
   };
 
   const signInWithGoogle = async () => {
     await promptAsync();
   };
+
   const logout = async () => {
     await signOut(auth);
   };
@@ -103,7 +124,6 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     password: string,
     imageUri: string | null
   ) => {
-    // 1. Cria o utilizador na autenticação do Firebase
     const userCredential = await createUserWithEmailAndPassword(
       auth,
       email,
@@ -112,48 +132,44 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
     const firebaseUser = userCredential.user;
     let finalAvatarUrl = DEFAULT_AVATAR_URL;
 
-    // 2. Se uma imagem foi selecionada, faz o upload
+    try {
+      await sendEmailVerification(firebaseUser);
+    } catch (e) {
+      console.warn("Erro ao enviar e-mail de verificação:", e);
+    }
+
     if (imageUri) {
       try {
         const response = await fetch(imageUri);
         const blob = await response.blob();
-        // Caminho no Storage: profile_pictures/UID_DO_UTILIZADOR
         const storageRef = ref(storage, `profile_pictures/${firebaseUser.uid}`);
         await uploadBytes(storageRef, blob);
         finalAvatarUrl = await getDownloadURL(storageRef);
       } catch (uploadError: any) {
-        // "any" para podermos ver o objeto todo
-        console.error(
-          "Erro detalhado ao fazer upload da imagem no registo:",
-          JSON.stringify(uploadError, null, 2) // <-- A MUDANÇA É AQUI
-        );
-        // Se o upload falhar, continua a usar a foto padrão, não impede o registo.
+        console.error("Erro ao fazer upload da imagem:", uploadError);
       }
     }
 
-    // 3. Atualiza o perfil na autenticação do Firebase (nome e foto)
     await updateProfile(firebaseUser, {
       displayName: name,
       photoURL: finalAvatarUrl,
     });
 
-    // 4. Cria o documento do utilizador no Firestore com todos os dados
     const userProfileData = { name, email, phone: "", avatar: finalAvatarUrl };
     await setDoc(doc(db, "users", firebaseUser.uid), userProfileData);
 
-    // 5. Atualiza o estado local do aplicativo
-    setUser({ uid: firebaseUser.uid, ...userProfileData });
+    await signOut(auth);
   };
 
+  // ... (updateUser sem alterações) ...
   const updateUser = async (newUserData: Partial<AppUser>) => {
     if (!user || !auth.currentUser)
       throw new Error("Utilizador não autenticado.");
 
     try {
       const dataToUpdate = { ...newUserData };
-      let finalAvatarUrl = user.avatar; // Começa com a foto atual
+      let finalAvatarUrl = user.avatar;
 
-      // Se uma nova foto foi selecionada, faz o upload dela
       if (dataToUpdate.avatar && dataToUpdate.avatar.startsWith("file://")) {
         try {
           const response = await fetch(dataToUpdate.avatar);
@@ -161,27 +177,20 @@ export const UserProvider = ({ children }: { children: ReactNode }) => {
           const storageRef = ref(storage, `profile_pictures/${user.uid}`);
           await uploadBytes(storageRef, blob);
           finalAvatarUrl = await getDownloadURL(storageRef);
-          dataToUpdate.avatar = finalAvatarUrl; // Atualiza para a nova URL
+          dataToUpdate.avatar = finalAvatarUrl;
         } catch (uploadError) {
-          console.error(
-            "Erro ao fazer upload da nova imagem de perfil:",
-            uploadError
-          );
-          // Se o upload falhar, reverte para a imagem antiga para não quebrar o perfil
+          console.error("Erro ao atualizar imagem de perfil:", uploadError);
           dataToUpdate.avatar = user.avatar;
         }
       }
 
-      // Atualiza o perfil na autenticação do Firebase
       await updateProfile(auth.currentUser, {
         displayName: dataToUpdate.name,
         photoURL: finalAvatarUrl,
       });
 
-      // Atualiza o documento no Firestore
       await updateDoc(doc(db, "users", user.uid), dataToUpdate);
 
-      // Atualiza o estado local no aplicativo para refletir as mudanças imediatamente
       setUser((current) =>
         current ? ({ ...current, ...dataToUpdate } as AppUser) : null
       );
