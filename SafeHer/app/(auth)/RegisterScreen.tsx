@@ -4,8 +4,9 @@ import { useRouter } from "expo-router";
 import React, { useContext, useState } from "react";
 import {
   ActivityIndicator,
-  Modal, // Importado
+  Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -13,16 +14,24 @@ import {
   Text,
   TouchableOpacity,
   View,
-  Image,
 } from "react-native";
 import CustomInput from "../../components/CustomInput";
 import { UserContext, UserContextType } from "../../contexts/UserContext";
 
-// Componente PasswordStrengthIndicator (Sem alterações)
+// --- VALIDATOR DE SENHA (Atualizado com Minúscula) ---
+const checkPasswordStrength = (password: string) => {
+  return {
+    hasMinLength: password.length >= 6,
+    hasUpperCase: /[A-Z]/.test(password),
+    hasLowerCase: /[a-z]/.test(password), // Adicionado
+    hasSpecialChar: /[!@#$%^&*(),.?":{}|<>]/.test(password),
+  };
+};
+
+// Componente Visual de Força da Senha
 const PasswordStrengthIndicator = ({ password }: { password: string }) => {
-  const hasMinLength = password.length >= 6;
-  const hasUpperCase = /[A-Z]/.test(password);
-  const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+  const { hasMinLength, hasUpperCase, hasLowerCase, hasSpecialChar } =
+    checkPasswordStrength(password);
 
   const Requirement = ({ met, text }: { met: boolean; text: string }) => (
     <View style={styles.requirementRow}>
@@ -42,14 +51,21 @@ const PasswordStrengthIndicator = ({ password }: { password: string }) => {
   return (
     <View style={styles.passwordRequirementsContainer}>
       <Requirement met={hasMinLength} text="Pelo menos 6 caracteres" />
-      <Requirement met={hasUpperCase} text="Uma letra maiúscula" />
+      <Requirement met={hasUpperCase} text="Uma letra maiúscula (A-Z)" />
+      <Requirement met={hasLowerCase} text="Uma letra minúscula (a-z)" />
       <Requirement met={hasSpecialChar} text="Um caractere especial (!@#...)" />
     </View>
   );
 };
 
-// --- NOVO MODAL BONITO ---
-const SuccessModal = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => (
+// --- MODAL DE SUCESSO ---
+const SuccessModal = ({
+  visible,
+  onClose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+}) => (
   <Modal
     animationType="fade"
     transparent={true}
@@ -66,10 +82,7 @@ const SuccessModal = ({ visible, onClose }: { visible: boolean; onClose: () => v
           Enviamos um link de verificação para o seu e-mail. Por favor,
           verifique sua caixa de entrada para ativar sua conta.
         </Text>
-        <TouchableOpacity
-          style={modalStyles.modalButton}
-          onPress={onClose}
-        >
+        <TouchableOpacity style={modalStyles.modalButton} onPress={onClose}>
           <Text style={modalStyles.modalButtonText}>OK, ir para Login</Text>
         </TouchableOpacity>
       </View>
@@ -90,14 +103,12 @@ export default function RegisterScreen() {
 
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  
-  // --- NOVO ESTADO DO MODAL ---
+
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const router = useRouter();
   const context = useContext(UserContext) as UserContextType;
 
-  // handlePickImage (Sem alterações)
   const handlePickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -110,54 +121,59 @@ export default function RegisterScreen() {
     }
   };
 
-  // --- FUNÇÃO DE REGISTRO ATUALIZADA ---
+  // --- FUNÇÃO DE REGISTRO BLINDADA ---
   const handleRegister = async () => {
+    // 1. Verifica campos vazios
     if (!fullName || !email || !password) {
       setErrorMessage("Por favor, preencha todos os campos.");
       return;
     }
+
+    // 2. Verifica se senhas batem
     if (password !== confirmPassword) {
       setErrorMessage("As senhas não coincidem!");
       return;
     }
-    setErrorMessage("");
-    setIsLoading(true); // 1. Mostra o "Carregando"
-    try {
-      // 2. Chama o registro (que cria, envia e-mail e desloga)
-      await context.register(fullName, email, password, imageUri);
-      
-      // 3. Sucesso! Para de carregar
-      setIsLoading(false); 
-      
-      // 4. Mostra o Modal Bonito
-      setShowSuccessModal(true);
 
+    // 3. VERIFICAÇÃO RIGOROSA DA SENHA (O que faltava)
+    const { hasMinLength, hasUpperCase, hasLowerCase, hasSpecialChar } =
+      checkPasswordStrength(password);
+
+    if (!hasMinLength || !hasUpperCase || !hasLowerCase || !hasSpecialChar) {
+      setErrorMessage("A senha não atende aos requisitos de segurança.");
+      return; // <--- Bloqueia o registro aqui
+    }
+
+    setErrorMessage("");
+    setIsLoading(true);
+
+    try {
+      await context.register(fullName, email, password, imageUri);
+      setIsLoading(false);
+      setShowSuccessModal(true);
     } catch (error: any) {
-      setIsLoading(false); // Para de carregar em caso de erro
+      setIsLoading(false);
       if (error.code === "auth/email-already-in-use") {
         setErrorMessage("Este e-mail já está sendo utilizado.");
       } else if (error.code === "auth/weak-password") {
-        setErrorMessage("A senha é muito fraca. Siga os requisitos.");
+        // Fallback caso o Firebase reclame, mas nossa validação acima já deve barrar
+        setErrorMessage("A senha é muito fraca.");
       } else {
         setErrorMessage("Ocorreu um erro ao criar a conta.");
         console.error(error);
       }
     }
-    // O finally foi removido para termos controle do isLoading
   };
-  
-  // --- NOVA FUNÇÃO PARA FECHAR O MODAL ---
+
   const handleModalClose = () => {
     setShowSuccessModal(false);
-    // 5. Navega para o login APÓS o usuário ver a mensagem
     router.replace("/(auth)/LoginScreen");
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* --- RENDERIZA O MODAL --- */}
       <SuccessModal visible={showSuccessModal} onClose={handleModalClose} />
-      
+
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -174,14 +190,13 @@ export default function RegisterScreen() {
             <Ionicons name="chevron-back" size={28} color="#333" />
           </TouchableOpacity>
 
-          {/* ... Restante do seu JSX ... */}
-          {/* (headerContainer, imagePickerContainer, inputs...) */}
           <View style={styles.headerContainer}>
             <Text style={styles.title}>Crie sua Conta</Text>
             <Text style={styles.subtitle}>
               Junte-se à nossa comunidade de apoio
             </Text>
           </View>
+
           <TouchableOpacity
             style={styles.imagePickerContainer}
             onPress={handlePickImage}
@@ -197,6 +212,7 @@ export default function RegisterScreen() {
               <Ionicons name="add" size={18} color="#fff" />
             </View>
           </TouchableOpacity>
+
           <CustomInput
             icon="person-outline"
             placeholder="Nome Completo"
@@ -212,6 +228,7 @@ export default function RegisterScreen() {
             keyboardType="email-address"
             autoCapitalize="none"
           />
+
           <CustomInput
             icon="lock-closed-outline"
             placeholder="Crie uma senha"
@@ -221,6 +238,12 @@ export default function RegisterScreen() {
             secureTextEntry={!isPasswordVisible}
             onToggleVisibility={() => setIsPasswordVisible(!isPasswordVisible)}
           />
+
+          {/* Exibe o indicador se o usuário começou a digitar */}
+          {password.length > 0 && (
+            <PasswordStrengthIndicator password={password} />
+          )}
+
           <CustomInput
             icon="lock-closed-outline"
             placeholder="Confirme sua senha"
@@ -232,16 +255,13 @@ export default function RegisterScreen() {
               setIsConfirmPasswordVisible(!isConfirmPasswordVisible)
             }
           />
-          {password.length > 0 && (
-            <PasswordStrengthIndicator password={password} />
-          )}
 
           {errorMessage ? (
             <Text style={styles.errorText}>{errorMessage}</Text>
           ) : (
             <View style={styles.errorSpacer} />
           )}
-          
+
           <TouchableOpacity
             style={styles.mainButton}
             onPress={handleRegister}
@@ -253,6 +273,7 @@ export default function RegisterScreen() {
               <Text style={styles.mainButtonText}>Criar Conta</Text>
             )}
           </TouchableOpacity>
+
           <View style={styles.footerContainer}>
             <Text style={styles.footerText}>Já tem uma conta? </Text>
             <TouchableOpacity
@@ -267,7 +288,7 @@ export default function RegisterScreen() {
   );
 }
 
-// Estilos da Tela (sem alterações)
+// Estilos
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FAF9F6" },
   content: {
@@ -351,7 +372,7 @@ const styles = StyleSheet.create({
   linkText: { color: "#FF6B6B", fontWeight: "bold", fontSize: 14 },
 });
 
-// --- ESTILOS DO NOVO MODAL ---
+// Estilos Modal
 const modalStyles = StyleSheet.create({
   centeredView: {
     flex: 1,
@@ -366,18 +387,13 @@ const modalStyles = StyleSheet.create({
     padding: 25,
     alignItems: "center",
     shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 5,
     width: "90%",
   },
-  iconContainer: {
-    marginBottom: 15,
-  },
+  iconContainer: { marginBottom: 15 },
   modalTitle: {
     marginBottom: 10,
     textAlign: "center",

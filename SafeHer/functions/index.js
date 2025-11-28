@@ -87,14 +87,11 @@ app.post("/chatbot", async (req, res) => {
 
 exports.api = onRequest({ secrets: ["CUIDAI_API_KEY"] }, app);
 
-// ==================================================================
-// 🛡️ PARTE 2: SEGURANÇA (Agora em Gen 2 também)
-// ==================================================================
 
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    // ⚠️ PREENCHA AQUI ⚠️
+
     user: "safeher.appp@gmail.com",
     pass: "iooc fdon qhmn jqrz",
   },
