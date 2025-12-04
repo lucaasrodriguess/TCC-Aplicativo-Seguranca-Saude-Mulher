@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Redirecionando...</title>
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        // 1. Pega os parâmetros da URL (oobCode, mode, apiKey, etc.)
+        const params = new URLSearchParams(window.location.search);
+        const mode = params.get("mode");
+
+        // 2. Define para onde mandar o usuário
+        let destination = "";
+
+        switch (mode) {
+          case "resetPassword":
+            destination = "reset.html";
+            break;
+          case "verifyEmail":
+            destination = "verify.html";
+            break;
+          case "recoverEmail":
+            // Caso opcional: se alguém mudar o e-mail da conta
+            // Você pode criar um recover.html ou mandar para o reset
+            destination = "reset.html";
+            break;
+          default:
+            // Se não tiver modo conhecido, manda para o reset por padrão ou exibe erro
+            destination = "reset.html";
+        }
+
+        // 3. Monta o novo link mantendo os códigos (oobCode)
+        // window.location.search já contém "?mode=...&oobCode=..."
+        const finalUrl = destination + window.location.search;
+
+        // 4. Redireciona imediatamente
+        window.location.href = finalUrl;
+      });
+    </script>
+    <style>
+      /* Um loading simples enquanto redireciona */
+      body {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        margin: 0;
+        background-color: #f8f9fa;
+        font-family: sans-serif;
+        color: #003366;
+      }
+    </style>
+  </head>
+  <body>
+    <h3>Carregando...</h3>
+  </body>
+</html>

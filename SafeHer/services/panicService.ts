@@ -13,7 +13,7 @@ import {
 import { db } from "./firebaseConfig";
 
 // A URL base do seu servidor de rastreamento, a mesma da tela "Minha Localização"
-const TRACKING_SERVER_URL = "https://wilful-emlyn-safeher-41c63af9.koyeb.app";
+const TRACKING_SERVER_URL = "https://rural-maggie-safeher-8d4df040.koyeb.app";
 
 type Contact = { id: string; name: string; phone: string };
 

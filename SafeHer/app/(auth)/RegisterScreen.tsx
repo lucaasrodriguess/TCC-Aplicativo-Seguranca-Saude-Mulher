@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -17,10 +18,20 @@ import {
 import CustomInput from "../../components/CustomInput";
 import { UserContext, UserContextType } from "../../contexts/UserContext";
 
+// --- VALIDATOR DE SENHA (Atualizado com Minúscula) ---
+const checkPasswordStrength = (password: string) => {
+  return {
+    hasMinLength: password.length >= 6,
+    hasUpperCase: /[A-Z]/.test(password),
+    hasLowerCase: /[a-z]/.test(password), // Adicionado
+    hasSpecialChar: /[!@#$%^&*(),.?":{}|<>]/.test(password),
+  };
+};
+
+// Componente Visual de Força da Senha
 const PasswordStrengthIndicator = ({ password }: { password: string }) => {
-  const hasMinLength = password.length >= 6;
-  const hasUpperCase = /[A-Z]/.test(password);
-  const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+  const { hasMinLength, hasUpperCase, hasLowerCase, hasSpecialChar } =
+    checkPasswordStrength(password);
 
   const Requirement = ({ met, text }: { met: boolean; text: string }) => (
     <View style={styles.requirementRow}>
@@ -40,11 +51,44 @@ const PasswordStrengthIndicator = ({ password }: { password: string }) => {
   return (
     <View style={styles.passwordRequirementsContainer}>
       <Requirement met={hasMinLength} text="Pelo menos 6 caracteres" />
-      <Requirement met={hasUpperCase} text="Uma letra maiúscula" />
+      <Requirement met={hasUpperCase} text="Uma letra maiúscula (A-Z)" />
+      <Requirement met={hasLowerCase} text="Uma letra minúscula (a-z)" />
       <Requirement met={hasSpecialChar} text="Um caractere especial (!@#...)" />
     </View>
   );
 };
+
+// --- MODAL DE SUCESSO ---
+const SuccessModal = ({
+  visible,
+  onClose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+}) => (
+  <Modal
+    animationType="fade"
+    transparent={true}
+    visible={visible}
+    onRequestClose={onClose}
+  >
+    <View style={modalStyles.centeredView}>
+      <View style={modalStyles.modalView}>
+        <View style={modalStyles.iconContainer}>
+          <Ionicons name="checkmark-circle" size={50} color="#10B981" />
+        </View>
+        <Text style={modalStyles.modalTitle}>Conta Criada!</Text>
+        <Text style={modalStyles.modalText}>
+          Enviamos um link de verificação para o seu e-mail. Por favor,
+          verifique sua caixa de entrada para ativar sua conta.
+        </Text>
+        <TouchableOpacity style={modalStyles.modalButton} onPress={onClose}>
+          <Text style={modalStyles.modalButtonText}>OK, ir para Login</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  </Modal>
+);
 
 export default function RegisterScreen() {
   const [fullName, setFullName] = useState("");
@@ -59,6 +103,8 @@ export default function RegisterScreen() {
 
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const router = useRouter();
   const context = useContext(UserContext) as UserContextType;
@@ -75,35 +121,59 @@ export default function RegisterScreen() {
     }
   };
 
+  // --- FUNÇÃO DE REGISTRO BLINDADA ---
   const handleRegister = async () => {
+    // 1. Verifica campos vazios
     if (!fullName || !email || !password) {
       setErrorMessage("Por favor, preencha todos os campos.");
       return;
     }
+
+    // 2. Verifica se senhas batem
     if (password !== confirmPassword) {
       setErrorMessage("As senhas não coincidem!");
       return;
     }
+
+    // 3. VERIFICAÇÃO RIGOROSA DA SENHA (O que faltava)
+    const { hasMinLength, hasUpperCase, hasLowerCase, hasSpecialChar } =
+      checkPasswordStrength(password);
+
+    if (!hasMinLength || !hasUpperCase || !hasLowerCase || !hasSpecialChar) {
+      setErrorMessage("A senha não atende aos requisitos de segurança.");
+      return; // <--- Bloqueia o registro aqui
+    }
+
     setErrorMessage("");
     setIsLoading(true);
+
     try {
       await context.register(fullName, email, password, imageUri);
+      setIsLoading(false);
+      setShowSuccessModal(true);
     } catch (error: any) {
+      setIsLoading(false);
       if (error.code === "auth/email-already-in-use") {
         setErrorMessage("Este e-mail já está sendo utilizado.");
       } else if (error.code === "auth/weak-password") {
-        setErrorMessage("A senha é muito fraca. Siga os requisitos.");
+        // Fallback caso o Firebase reclame, mas nossa validação acima já deve barrar
+        setErrorMessage("A senha é muito fraca.");
       } else {
         setErrorMessage("Ocorreu um erro ao criar a conta.");
         console.error(error);
       }
-    } finally {
-      setIsLoading(false);
     }
+  };
+
+  const handleModalClose = () => {
+    setShowSuccessModal(false);
+    router.replace("/(auth)/LoginScreen");
   };
 
   return (
     <SafeAreaView style={styles.container}>
+      <SuccessModal visible={showSuccessModal} onClose={handleModalClose} />
+
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -143,7 +213,6 @@ export default function RegisterScreen() {
             </View>
           </TouchableOpacity>
 
-          {/* Inputs Atualizados */}
           <CustomInput
             icon="person-outline"
             placeholder="Nome Completo"
@@ -159,6 +228,7 @@ export default function RegisterScreen() {
             keyboardType="email-address"
             autoCapitalize="none"
           />
+
           <CustomInput
             icon="lock-closed-outline"
             placeholder="Crie uma senha"
@@ -168,6 +238,12 @@ export default function RegisterScreen() {
             secureTextEntry={!isPasswordVisible}
             onToggleVisibility={() => setIsPasswordVisible(!isPasswordVisible)}
           />
+
+          {/* Exibe o indicador se o usuário começou a digitar */}
+          {password.length > 0 && (
+            <PasswordStrengthIndicator password={password} />
+          )}
+
           <CustomInput
             icon="lock-closed-outline"
             placeholder="Confirme sua senha"
@@ -179,10 +255,6 @@ export default function RegisterScreen() {
               setIsConfirmPasswordVisible(!isConfirmPasswordVisible)
             }
           />
-
-          {password.length > 0 && (
-            <PasswordStrengthIndicator password={password} />
-          )}
 
           {errorMessage ? (
             <Text style={styles.errorText}>{errorMessage}</Text>
@@ -216,6 +288,7 @@ export default function RegisterScreen() {
   );
 }
 
+// Estilos
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FAF9F6" },
   content: {
@@ -297,4 +370,56 @@ const styles = StyleSheet.create({
   },
   footerText: { fontSize: 14, color: "#555" },
   linkText: { color: "#FF6B6B", fontWeight: "bold", fontSize: 14 },
+});
+
+// Estilos Modal
+const modalStyles = StyleSheet.create({
+  centeredView: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+  },
+  modalView: {
+    margin: 20,
+    backgroundColor: "white",
+    borderRadius: 20,
+    padding: 25,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    width: "90%",
+  },
+  iconContainer: { marginBottom: 15 },
+  modalTitle: {
+    marginBottom: 10,
+    textAlign: "center",
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  modalText: {
+    marginBottom: 20,
+    textAlign: "center",
+    fontSize: 15,
+    color: "#555",
+    lineHeight: 22,
+  },
+  modalButton: {
+    backgroundColor: "#003249",
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 30,
+    elevation: 2,
+    width: "100%",
+  },
+  modalButtonText: {
+    color: "white",
+    fontWeight: "bold",
+    textAlign: "center",
+    fontSize: 16,
+  },
 });

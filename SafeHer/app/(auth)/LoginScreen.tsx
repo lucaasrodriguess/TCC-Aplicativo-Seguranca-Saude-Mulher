@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import React, { useContext, useState } from "react";
 import {
   ActivityIndicator,
+  Modal,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -16,6 +17,61 @@ import {
 } from "react-native";
 import { UserContext, UserContextType } from "../../contexts/UserContext";
 
+// --- IMPORTS DO FIREBASE ---
+import { sendPasswordResetEmail } from "firebase/auth";
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  serverTimestamp,
+} from "firebase/firestore";
+import { auth } from "../../services/firebaseConfig";
+
+// Inicializa o Firestore
+const db = getFirestore();
+
+// --- COMPONENTE MODAL GENÉRICO ---
+const InfoModal = ({
+  visible,
+  onClose,
+  title,
+  message,
+  buttonText,
+  icon,
+  iconColor,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  title: string;
+  message: string;
+  buttonText: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  iconColor: string;
+}) => (
+  <Modal
+    animationType="fade"
+    transparent={true}
+    visible={visible}
+    onRequestClose={onClose}
+  >
+    <View style={modalStyles.centeredView}>
+      <View style={modalStyles.modalView}>
+        <View style={modalStyles.iconContainer}>
+          <Ionicons name={icon} size={50} color={iconColor} />
+        </View>
+        <Text style={modalStyles.modalTitle}>{title}</Text>
+        <Text style={modalStyles.modalText}>{message}</Text>
+        <TouchableOpacity style={modalStyles.modalButton} onPress={onClose}>
+          <Text style={modalStyles.modalButtonText}>{buttonText}</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  </Modal>
+);
+
 export default function LoginScreen() {
   const context = useContext(UserContext) as UserContextType;
   const router = useRouter();
@@ -27,6 +83,66 @@ export default function LoginScreen() {
   const [isButtonLoading, setIsButtonLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
+  // --- ESTADOS DOS MODAIS ---
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [showNotVerifiedModal, setShowNotVerifiedModal] = useState(false);
+  const [showSecurityAlert, setShowSecurityAlert] = useState(false);
+
+  // --- FUNÇÕES AUXILIARES DE SEGURANÇA (FIRESTORE) ---
+
+  // Gera um ID padrão para o documento (tudo minúsculo, ponto vira underline)
+  const getDocId = (emailUser: string) => {
+    return emailUser.trim().toLowerCase().replace(/\./g, "_");
+  };
+
+  const registrarFalha = async (emailUser: string) => {
+    try {
+      console.log("--- Iniciando registro de falha ---");
+      const docId = getDocId(emailUser);
+      const docRef = doc(db, "login_attempts", docId);
+
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        const dados = docSnap.data();
+        const novasTentativas = (dados?.tentativas || 0) + 1;
+        console.log(`Atualizando falhas para: ${novasTentativas}`);
+
+        await updateDoc(docRef, {
+          tentativas: novasTentativas,
+          ultimoErro: serverTimestamp(),
+        });
+        return novasTentativas;
+      } else {
+        console.log("Primeira falha. Criando contador = 1");
+        await setDoc(docRef, {
+          email: emailUser,
+          tentativas: 1,
+          ultimoErro: serverTimestamp(),
+        });
+        return 1;
+      }
+    } catch (e) {
+      console.log(
+        "AVISO: Não foi possível registrar a falha no banco (verifique regras ou internet).",
+        e
+      );
+      return 1; // Retorna 1 para não quebrar a UI
+    }
+  };
+
+  const zerarTentativas = async (emailUser: string) => {
+    try {
+      const docId = getDocId(emailUser);
+      const docRef = doc(db, "login_attempts", docId);
+      await deleteDoc(docRef); // Remove o documento se logou com sucesso
+      console.log("Contador de falhas zerado com sucesso.");
+    } catch (e) {
+      console.log("Erro não-crítico ao limpar tentativas:", e);
+    }
+  };
+
+  // --- FUNÇÃO DE LOGIN PRINCIPAL ---
   const handleLogin = async () => {
     if (email.trim() === "" || password.trim() === "") {
       setErrorMessage("Por favor, preencha o e-mail e a senha.");
@@ -34,22 +150,47 @@ export default function LoginScreen() {
     }
     setErrorMessage("");
     setIsButtonLoading(true);
+
     try {
-      // --- CORREÇÃO: A chamada para o login foi simplificada ---
+      // Tenta fazer o login
       await context.login(email, password);
+
+      // SE SUCESSO: Zera o contador de tentativas ruins
+      await zerarTentativas(email);
+
+      // O listener onAuthStateChanged no Context cuidará da navegação automaticamente
     } catch (error: any) {
-      if (
-        [
-          "auth/user-not-found",
-          "auth/wrong-password",
-          "auth/invalid-credential",
-          "auth/invalid-email",
-        ].includes(error.code)
+      // Usamos console.log para evitar a "Tela Vermelha" (LogBox) no emulador
+      console.log("Erro de Login capturado:", error.code);
+
+      // 1. E-mail não verificado
+      if (error.message === "auth/email-not-verified") {
+        setShowNotVerifiedModal(true);
+      }
+      // 2. Senha Errada (Lógica de Força Bruta)
+      else if (
+        error.code === "auth/wrong-password" ||
+        error.code === "auth/invalid-credential"
+      ) {
+        console.log("Senha incorreta. Registrando tentativa...");
+
+        // Aguarda o registro no banco antes de decidir o que mostrar
+        const tentativas = await registrarFalha(email);
+
+        if (tentativas >= 3) {
+          setShowSecurityAlert(true); // Abre modal de alerta e bloqueio sugerido
+        } else {
+          setErrorMessage(`Senha incorreta. (${tentativas}/5 tentativas)`);
+        }
+      }
+      // 3. Usuário não existe ou e-mail inválido
+      else if (
+        error.code === "auth/user-not-found" ||
+        error.code === "auth/invalid-email"
       ) {
         setErrorMessage("E-mail ou senha incorretos.");
       } else {
         setErrorMessage("Ocorreu um erro inesperado. Tente novamente.");
-        console.error("Erro de Login:", error);
       }
     } finally {
       setIsButtonLoading(false);
@@ -60,16 +201,72 @@ export default function LoginScreen() {
     setIsGoogleLoading(true);
     try {
       await context.signInWithGoogle();
-      // O isLoading será tratado pelo listener global
     } catch (error) {
-      console.error("Erro no login com Google:", error);
+      console.log("Erro no login com Google:", error); // Alterado para log
       setErrorMessage("Não foi possível fazer login com o Google.");
       setIsGoogleLoading(false);
     }
   };
 
+  const handlePasswordReset = async () => {
+    if (email.trim() === "") {
+      setErrorMessage(
+        "Digite seu e-mail no campo acima para redefinir a senha."
+      );
+      return;
+    }
+    setErrorMessage("");
+    setIsButtonLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      setShowResetModal(true);
+    } catch (error: any) {
+      if (error.code === "auth/user-not-found") {
+        setErrorMessage("Nenhum usuário encontrado com este e-mail.");
+      } else {
+        setErrorMessage("Erro ao enviar e-mail de redefinição.");
+      }
+      console.log("Erro reset senha:", error);
+    } finally {
+      setIsButtonLoading(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
+      {/* --- MODAL 1: RESET DE SENHA --- */}
+      <InfoModal
+        visible={showResetModal}
+        onClose={() => setShowResetModal(false)}
+        title="Verifique seu E-mail"
+        message="Enviamos um link personalizado para redefinição de senha para o seu e-mail."
+        buttonText="OK"
+        icon="mail"
+        iconColor="#007AFF"
+      />
+
+      {/* --- MODAL 2: EMAIL NÃO VERIFICADO --- */}
+      <InfoModal
+        visible={showNotVerifiedModal}
+        onClose={() => setShowNotVerifiedModal(false)}
+        title="E-mail Não Verificado"
+        message="Sua conta foi criada, mas seu e-mail ainda não foi verificado. Por favor, cheque sua caixa de entrada."
+        buttonText="Entendi"
+        icon="alert-circle"
+        iconColor="#FF9500"
+      />
+
+      {/* --- MODAL 3: ALERTA DE SEGURANÇA --- */}
+      <InfoModal
+        visible={showSecurityAlert}
+        onClose={() => setShowSecurityAlert(false)}
+        title="Alerta de Segurança"
+        message="Detectamos 3 tentativas falhas de acesso. Por segurança, enviamos um alerta ao proprietário e recomendamos a troca de senha."
+        buttonText="Entendi"
+        icon="shield-checkmark"
+        iconColor="#c0392b"
+      />
+
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -135,7 +332,13 @@ export default function LoginScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* --- CORREÇÃO: Checkbox removido para simplificar a UI --- */}
+          <TouchableOpacity
+            style={styles.forgotPasswordButton}
+            onPress={handlePasswordReset}
+            disabled={isButtonLoading}
+          >
+            <Text style={styles.forgotPasswordText}>Esqueceu a senha?</Text>
+          </TouchableOpacity>
 
           {errorMessage ? (
             <Text style={styles.errorText}>{errorMessage}</Text>
@@ -195,6 +398,7 @@ export default function LoginScreen() {
   );
 }
 
+// --- ESTILOS ---
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#FAF9F6" },
   content: {
@@ -222,15 +426,24 @@ const styles = StyleSheet.create({
   inputIcon: { paddingHorizontal: 15 },
   input: { flex: 1, paddingVertical: 18, fontSize: 16, color: "#333" },
   eyeIcon: { paddingHorizontal: 15 },
+  forgotPasswordButton: {
+    alignSelf: "flex-end",
+  },
+  forgotPasswordText: {
+    color: "#003249",
+    fontSize: 14,
+    fontWeight: "600",
+  },
   errorText: {
     color: "#FF6B6B",
     fontSize: 14,
     fontWeight: "600",
     textAlign: "center",
     marginBottom: 10,
+    marginTop: 10,
     height: 20,
   },
-  errorSpacer: { height: 20, marginBottom: 10 },
+  errorSpacer: { height: 20, marginBottom: 10, marginTop: 10 },
   mainButton: {
     backgroundColor: "#003249",
     padding: 18,
@@ -269,4 +482,55 @@ const styles = StyleSheet.create({
   },
   footerText: { fontSize: 14, color: "#555" },
   linkText: { color: "#FF6B6B", fontWeight: "bold", fontSize: 14 },
+});
+
+const modalStyles = StyleSheet.create({
+  centeredView: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+  },
+  modalView: {
+    margin: 20,
+    backgroundColor: "white",
+    borderRadius: 20,
+    padding: 25,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    width: "90%",
+  },
+  iconContainer: { marginBottom: 15 },
+  modalTitle: {
+    marginBottom: 10,
+    textAlign: "center",
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  modalText: {
+    marginBottom: 20,
+    textAlign: "center",
+    fontSize: 15,
+    color: "#555",
+    lineHeight: 22,
+  },
+  modalButton: {
+    backgroundColor: "#003249",
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 30,
+    elevation: 2,
+    width: "100%",
+  },
+  modalButtonText: {
+    color: "white",
+    fontWeight: "bold",
+    textAlign: "center",
+    fontSize: 16,
+  },
 });
